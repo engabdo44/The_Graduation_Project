@@ -1,0 +1,7 @@
+{
+  "name": "Somali Police Force - Citizen Record System",
+  "description": "A secure, professional dashboard for Somali police officers to manage citizen criminal records, report new crimes, and analyze crime data using AI insights.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

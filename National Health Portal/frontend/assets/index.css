@@ -1,0 +1,49 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&family=Noto+Sans+Arabic:wght@400;700;900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-serif: "Playfair Display", serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-arabic: "Noto Sans Arabic", sans-serif;
+
+  --color-gov-navy: #0f172a;
+  --color-gov-gold: #b45309;
+  --color-gov-blue: #3b82f6;
+}
+
+@layer base {
+  body {
+    @apply font-sans bg-slate-50 text-slate-800 antialiased text-[13px];
+  }
+}
+
+@layer components {
+  .gov-panel {
+    @apply bg-white border border-slate-200 rounded-3xl shadow-sm;
+  }
+  
+  .gov-serif {
+    @apply font-serif;
+  }
+  
+  .gov-mono {
+    @apply font-mono;
+  }
+
+  .guilloche-pattern {
+    background-image: radial-gradient(circle at 1px 1px, rgba(15, 23, 42, 0.03) 1px, transparent 0);
+    background-size: 12px 12px;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 5px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-slate-100;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-slate-300 rounded-full hover:bg-slate-400 transition-colors;
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "Somalia MoH Health Management System",
+  "description": "A comprehensive hospital dashboard for the Somalia Ministry of Health to manage birth certificates, death certificates, and citizen health records.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": []
+}
