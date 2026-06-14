@@ -151,7 +151,7 @@ app.post('/api/signup', async (req, res) => {
 
 // Admin endpoint to register a new citizen
 app.post('/api/admin/register-citizen', async (req, res) => {
-    const { fullName, dob, gender, phone, email, address, maritalStatus } = req.body;
+    const { fullName, dob, gender, phone, email, address, maritalStatus, personal_photo } = req.body;
 
     // Optional: add authorization check here to ensure req.user is an admin
 
@@ -189,6 +189,11 @@ app.post('/api/admin/register-citizen', async (req, res) => {
             }
         });
 
+        if (personal_photo) {
+            await prisma.$executeRawUnsafe(`UPDATE citizens SET photo = ? WHERE citizen_id = ?`, personal_photo, newCitizen.citizen_id);
+            newCitizen.photo = personal_photo;
+        }
+
         // Optionally, create a user account for them to login
         const defaultUsername = nationalNumber;
         const defaultPassword = 'Password123!'; // Should be generated or sent via email in a real app
@@ -221,7 +226,7 @@ app.post('/api/admin/register-citizen', async (req, res) => {
 
 // Admin endpoint to register a new resident
 app.post('/api/admin/register-resident', async (req, res) => {
-    const { fullName, dob, gender, nationality, passportNumber, visaType, sponsorName, phone, email, address } = req.body;
+    const { fullName, dob, gender, nationality, passportNumber, visaType, sponsorName, phone, responsiblePersonPhone, email, address, personal_photo } = req.body;
 
     // Optional: authorization check here
 
@@ -254,10 +259,16 @@ app.post('/api/admin/register-resident', async (req, res) => {
                 sponsor_name: sponsorName || null,
                 address: address || null,
                 phone: phone || null,
+                responsible_person_phone: responsiblePersonPhone || null,
                 email: email || null,
                 status: 'active'
             }
         });
+
+        if (personal_photo) {
+            await prisma.$executeRawUnsafe(`UPDATE residents SET photo = ? WHERE resident_id = ?`, personal_photo, newResident.resident_id);
+            newResident.photo = personal_photo;
+        }
 
         const defaultUsername = residenceNumber;
         const defaultPassword = 'Password123!';
@@ -290,7 +301,7 @@ app.post('/api/admin/register-resident', async (req, res) => {
 
 // Admin endpoint to issue a new National/Residence ID Card
 app.post('/api/admin/issue-id-card', async (req, res) => {
-    const { referenceNumber } = req.body;
+    const { referenceNumber, personal_photo } = req.body;
 
     try {
         // Step 1: Check if it's a citizen or resident by attempting to find both
@@ -301,8 +312,19 @@ app.post('/api/admin/issue-id-card', async (req, res) => {
             return res.status(404).json({ success: false, message: 'Person not found. Please register them first.' });
         }
 
-        const idType = citizen ? 'citizen' : 'resident';
         const personIdValue = citizen ? citizen.citizen_id : resident.resident_id;
+        const idType = citizen ? 'citizen' : 'resident';
+
+        // Update photo if provided
+        if (personal_photo) {
+            if (citizen) {
+                await prisma.$executeRawUnsafe(`UPDATE citizens SET photo = ? WHERE citizen_id = ?`, personal_photo, personIdValue);
+                citizen.photo = personal_photo;
+            } else {
+                await prisma.$executeRawUnsafe(`UPDATE residents SET photo = ? WHERE resident_id = ?`, personal_photo, personIdValue);
+                resident.photo = personal_photo;
+            }
+        }
 
         // Step 2: Determine issue number 
         let existingCards;
@@ -365,7 +387,7 @@ app.post('/api/admin/issue-id-card', async (req, res) => {
 
 // Admin endpoint: Renew ID Card
 app.post('/api/admin/renew-id', async (req, res) => {
-    const { referenceNumber, applicationId } = req.body;
+    const { referenceNumber, applicationId, personal_photo } = req.body;
 
     try {
         const citizen = await prisma.citizen.findUnique({ where: { national_number: referenceNumber } });
@@ -376,6 +398,17 @@ app.post('/api/admin/renew-id', async (req, res) => {
         }
 
         const personIdValue = citizen ? citizen.citizen_id : resident.resident_id;
+
+        // Update photo if provided
+        if (personal_photo) {
+            if (citizen) {
+                await prisma.$executeRawUnsafe(`UPDATE citizens SET photo = ? WHERE citizen_id = ?`, personal_photo, personIdValue);
+                citizen.photo = personal_photo;
+            } else {
+                await prisma.$executeRawUnsafe(`UPDATE residents SET photo = ? WHERE resident_id = ?`, personal_photo, personIdValue);
+                resident.photo = personal_photo;
+            }
+        }
 
         // Step 1: Mark all existing active cards as expired/cancelled
         if (citizen) {
@@ -453,15 +486,75 @@ app.post('/api/admin/renew-id', async (req, res) => {
     }
 });
 
+// Admin endpoint: Issue New Passport
+app.post('/api/admin/issue-passport', async (req, res) => {
+    const { referenceNumber, passportType, applicationId, personal_photo } = req.body;
+
+    try {
+        const citizen = await prisma.citizen.findUnique({ where: { national_number: referenceNumber } });
+
+        if (!citizen) {
+            return res.status(404).json({ success: false, message: 'Citizen not found. Passports are only for citizens.' });
+        }
+
+        // Update photo if provided
+        if (personal_photo) {
+            await prisma.$executeRawUnsafe(`UPDATE citizens SET photo = ? WHERE citizen_id = ?`, personal_photo, citizen.citizen_id);
+            citizen.photo = personal_photo;
+        }
+
+        // Step 1: Create new passport
+        const passportNumber = `P${Math.floor(10000000 + Math.random() * 90000000).toString()}`;
+        const issueDate = new Date();
+        const expiryDate = new Date();
+        expiryDate.setFullYear(issueDate.getFullYear() + 5);
+
+        const newPassport = await prisma.passport.create({
+            data: {
+                citizen_id: citizen.citizen_id,
+                passport_number: passportNumber,
+                type: passportType || 'regular',
+                issue_date: issueDate,
+                expiry_date: expiryDate,
+                status: 'active'
+            }
+        });
+
+        // Step 2: Update application status if applicationId provided
+        if (applicationId && applicationId !== 'null' && applicationId !== 'undefined') {
+            await prisma.application.update({
+                where: { application_id: BigInt(applicationId) },
+                data: { status: 'completed' }
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'Passport issued successfully.',
+            passport: newPassport,
+            person: citizen
+        });
+    } catch (error) {
+        console.error('Error issuing passport:', error);
+        res.status(500).json({ error: 'Failed to issue passport', details: error.message });
+    }
+});
+
 // Admin endpoint: Renew Passport
 app.post('/api/admin/renew-passport', async (req, res) => {
-    const { referenceNumber, passportType, applicationId } = req.body;
+    const { referenceNumber, passportType, applicationId, personal_photo } = req.body;
 
     try {
         const citizen = await prisma.citizen.findUnique({ where: { national_number: referenceNumber } });
 
         if (!citizen) {
             return res.status(404).json({ success: false, message: 'Citizen not found.' });
+        }
+
+        // Update photo if provided
+        if (personal_photo) {
+            await prisma.$executeRawUnsafe(`UPDATE citizens SET photo = ? WHERE citizen_id = ?`, personal_photo, citizen.citizen_id);
+            citizen.photo = personal_photo;
         }
 
         // Step 1: Mark all existing active passports as expired
@@ -504,6 +597,31 @@ app.post('/api/admin/renew-passport', async (req, res) => {
     } catch (error) {
         console.error('Error renewing passport:', error);
         res.status(500).json({ error: 'Failed to renew passport', details: error.message });
+    }
+});
+
+// Admin endpoint to verify passport renewal data
+app.get('/api/admin/verify-passport-renewal/:ref', async (req, res) => {
+    const { ref } = req.params;
+    try {
+        const citizen = await prisma.citizen.findFirst({
+            where: {
+                OR: [
+                    { national_number: ref },
+                    { passports: { some: { passport_number: ref } } }
+                ]
+            },
+            include: { passports: { orderBy: { issue_date: 'desc' } } }
+        });
+
+        if (!citizen) {
+            return res.status(404).json({ success: false, message: 'Passport or National ID not found. Cannot proceed.' });
+        }
+
+        res.json({ success: true, citizen });
+    } catch (error) {
+        console.error('Error verifying passport renewal:', error);
+        res.status(500).json({ success: false, message: 'Server error.', details: error.message });
     }
 });
 
@@ -563,18 +681,28 @@ app.get('/api/admin/search-passport', async (req, res) => {
     if (!query) return res.status(400).json({ success: false, message: 'Search query is required' });
 
     try {
-        const passports = await prisma.passport.findMany({
+        const citizens = await prisma.citizen.findMany({
             where: {
                 OR: [
-                    { passport_number: { contains: query } },
-                    { citizen: { full_name: { contains: query } } },
-                    { citizen: { national_number: { contains: query } } }
+                    { national_number: { contains: query } },
+                    { full_name: { contains: query } },
+                    { passports: { some: { passport_number: { contains: query } } } }
                 ]
             },
-            include: { citizen: true }
+            include: { passports: { orderBy: { issue_date: 'desc' } } }
         });
 
-        res.json({ success: true, results: passports });
+        // We format the results to match what PassportSearch UI expects
+        const results = citizens.map(c => ({
+            citizen: c,
+            passport_number: c.passports[0]?.passport_number || 'N/A',
+            issue_date: c.passports[0]?.issue_date || new Date(),
+            expiry_date: c.passports[0]?.expiry_date || new Date(),
+            type: c.passports[0]?.type || 'regular',
+            _hasPassport: c.passports.length > 0
+        }));
+
+        res.json({ success: true, results });
     } catch (error) {
         console.error('Error searching passports:', error);
         res.status(500).json({ success: false, message: 'Search failed', details: error.message });
@@ -583,7 +711,7 @@ app.get('/api/admin/search-passport', async (req, res) => {
 
 // User endpoint: Submit a request (Renewal or Replacement)
 app.post('/api/user/requests', async (req, res) => {
-    const { applicant_type, applicant_id, service_type } = req.body;
+    const { applicant_type, applicant_id, service_type, personal_photo } = req.body;
     if (!applicant_type || !applicant_id || !service_type) {
         return res.status(400).json({ success: false, message: 'Missing required fields' });
     }
@@ -604,6 +732,10 @@ app.post('/api/user/requests', async (req, res) => {
         const newRequest = await prisma.application.create({
             data
         });
+
+        if (personal_photo) {
+            await prisma.$executeRawUnsafe(`UPDATE applications SET personal_photo = ? WHERE application_id = ?`, personal_photo, newRequest.application_id);
+        }
 
         res.json({ success: true, message: 'Request submitted successfully', request_id: newRequest.application_id.toString() });
     } catch (error) {

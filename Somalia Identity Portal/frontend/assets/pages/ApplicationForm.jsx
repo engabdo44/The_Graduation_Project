@@ -28,7 +28,8 @@ const ApplicationForm = () => {
         address: 'حي ودجر، مقديشو',
         city: 'مقديشو',
         office: 'المكتب الرئيسي (طريق المطار)',
-        paymentMethod: 'card'
+        paymentMethod: 'card',
+        personal_photo: ''
     });
 
     const services = getServices(t);
@@ -65,7 +66,8 @@ const ApplicationForm = () => {
                     body: JSON.stringify({
                         applicant_type: typeValue,
                         applicant_id: accId,
-                        service_type: svcType
+                        service_type: svcType,
+                        personal_photo: formData.personal_photo
                     })
                 });
             } catch (e) {
@@ -285,13 +287,30 @@ const ApplicationForm = () => {
                                         </div>
 
                                         <div className="grid md:grid-cols-2 gap-8">
-                                            <div className="p-10 border-3 border-dashed border-gray-100 dark:border-white/10 rounded-[3rem] text-center hover:bg-gray-50 transition-all cursor-pointer group">
-                                                <div className="w-20 h-20 bg-primary-50 dark:bg-white/10 rounded-3xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
-                                                    <Camera size={32} className="text-primary-900 dark:text-gold-400" />
-                                                </div>
-                                                <h4 className="font-black mb-2 text-gray-900 dark:text-white">الصورة الشخصية</h4>
-                                                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest leading-relaxed">بمواصفات رسمية (خلفية بيضاء)</p>
-                                            </div>
+                                            <label className="p-10 border-3 border-dashed border-gray-100 dark:border-white/10 rounded-[3rem] text-center hover:bg-gray-50 transition-all cursor-pointer group flex flex-col items-center justify-center relative overflow-hidden">
+                                                <input 
+                                                    type="file" 
+                                                    accept="image/*" 
+                                                    className="hidden" 
+                                                    onChange={(e) => {
+                                                        const file = e.target.files[0];
+                                                        if (file) {
+                                                            const reader = new FileReader();
+                                                            reader.onloadend = () => setFormData({...formData, personal_photo: reader.result});
+                                                            reader.readAsDataURL(file);
+                                                        }
+                                                    }} 
+                                                />
+                                                {formData.personal_photo ? (
+                                                    <img src={formData.personal_photo} alt="Personal Photo" className="w-full h-full object-cover absolute inset-0 opacity-80" />
+                                                ) : (
+                                                    <div className="w-20 h-20 bg-primary-50 dark:bg-white/10 rounded-3xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
+                                                        <Camera size={32} className="text-primary-900 dark:text-gold-400" />
+                                                    </div>
+                                                )}
+                                                <h4 className="font-black mb-2 text-gray-900 dark:text-white z-10 relative">الصورة الشخصية</h4>
+                                                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest leading-relaxed z-10 relative">بمواصفات رسمية (خلفية بيضاء)</p>
+                                            </label>
                                             {formData.reason === 'lost' && (
                                                 <div className="p-10 border-3 border-dashed border-gray-100 dark:border-white/10 rounded-[3rem] text-center hover:bg-gray-50 transition-all cursor-pointer group">
                                                     <div className="w-20 h-20 bg-red-50 dark:bg-red-500/10 rounded-3xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">

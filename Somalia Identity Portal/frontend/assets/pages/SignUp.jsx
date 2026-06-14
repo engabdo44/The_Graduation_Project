@@ -97,7 +97,7 @@ const SignUp = () => {
                     <div className="relative w-28 h-28 mx-auto">
                         <div className="absolute inset-0 bg-primary-400 blur-[40px] opacity-20 rounded-full"></div>
                         <img
-                            src="/logo.svg"
+                            src="/logo.png"
                             alt="Somalia Coat of Arms"
                             className="w-full h-full object-contain relative z-10 drop-shadow-2xl"
                         />
@@ -131,7 +131,7 @@ const SignUp = () => {
                         {/* Mobile Logo */}
                         <div className="lg:hidden w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-white/20 shadow-lg">
                             <img
-                                src="/logo.svg"
+                                src="/logo.png"
                                 alt="Somalia Coat of Arms"
                                 className="w-10 h-10 object-contain drop-shadow-md"
                             />

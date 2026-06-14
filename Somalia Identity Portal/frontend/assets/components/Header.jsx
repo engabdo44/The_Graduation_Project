@@ -90,7 +90,7 @@ const Header = () => {
                         </button>
 
                         <Link to="/home" className="flex items-center gap-3 group">
-                            <img src="/logo.svg" alt="Somalia Logo" className="w-12 h-12 object-contain drop-shadow-md group-hover:scale-110 transition-transform" />
+                            <img src="/logo.png" alt="Somalia Logo" className="w-12 h-12 object-contain drop-shadow-md group-hover:scale-110 transition-transform" />
 
 
                             <div className="flex flex-col">

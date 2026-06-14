@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
     Users, FileText, CheckCircle2, XCircle, Clock,
     TrendingUp, DollarSign, ShieldAlert, MoreVertical,
@@ -8,7 +8,7 @@ import {
     Globe, LogOut, UserCircle, Briefcase, ChevronRight, Menu,
     ScanFace, Fingerprint, ShieldCheck, CreditCard, Landmark,
     Sparkles, Cpu, MapPin, Shield, Award, AlertCircle, Trash2,
-    FileSearch, Moon, Sun, ArrowUpRight, ArrowDownRight, Send, Camera, BookOpen, RotateCw, RefreshCcw
+    FileSearch, Moon, Sun, ArrowUpRight, ArrowDownRight, Send, Camera, BookOpen, RotateCw, RefreshCcw, Upload
 } from 'lucide-react';
 import { useLanguage } from '../LanguageContext';
 import { useTheme } from '../ThemeContext';
@@ -93,6 +93,95 @@ const AdminSidebar = ({ isOpen, setIsOpen }) => {
                 </button>
             </div>
         </aside>
+    );
+};
+
+// --- Sub-component: PhotoCapture ---
+const PhotoCapture = ({ photo, setPhoto, label = "Upload or Capture Photo" }) => {
+    const [mode, setMode] = useState('upload');
+    const [stream, setStream] = useState(null);
+    const videoRef = useRef(null);
+
+    useEffect(() => {
+        return () => {
+            if (stream) stream.getTracks().forEach(track => track.stop());
+        };
+    }, []);
+
+    const startCamera = async () => {
+        try {
+            const mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
+            setStream(mediaStream);
+            setMode('camera');
+            setTimeout(() => {
+                if (videoRef.current) {
+                    videoRef.current.srcObject = mediaStream;
+                }
+            }, 100);
+        } catch (err) {
+            alert('Camera access denied or unavailable.');
+        }
+    };
+
+    const stopCamera = () => {
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+            setStream(null);
+        }
+        setMode('upload');
+    };
+
+    const capturePhoto = () => {
+        if (videoRef.current) {
+            const canvas = document.createElement('canvas');
+            canvas.width = videoRef.current.videoWidth || 640;
+            canvas.height = videoRef.current.videoHeight || 480;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+            setPhoto(canvas.toDataURL('image/jpeg', 0.8));
+            stopCamera();
+        }
+    };
+
+    return (
+        <div className="w-full bg-gray-50/50 dark:bg-white/5 border-2 border-dashed border-gray-200 dark:border-white/10 rounded-2xl p-6 flex flex-col items-center justify-center relative min-h-[220px]">
+            {photo ? (
+                <div className="w-full flex flex-col items-center animate-fade-in text-center relative z-10">
+                    <img src={photo} alt="Result" className="w-32 h-32 object-cover rounded-xl shadow-lg border border-primary-500 mb-4" />
+                    <button type="button" onClick={() => setPhoto('')} className="bg-red-50 hover:bg-red-100 text-red-600 px-4 py-2 font-black text-[10px] uppercase tracking-widest rounded-lg border border-red-200 transition-all">Retake / Remove</button>
+                </div>
+            ) : mode === 'camera' ? (
+                <div className="w-full flex flex-col items-center animate-fade-in relative z-10">
+                    <video ref={videoRef} autoPlay playsInline className="w-full max-w-[200px] aspect-square object-cover rounded-xl shadow-lg mb-4 bg-black border border-gray-300 dark:border-white/20" />
+                    <div className="flex gap-2">
+                        <button type="button" onClick={capturePhoto} className="bg-primary-600 hover:bg-primary-700 text-white px-5 py-2 font-black text-[10px] uppercase tracking-wider rounded-lg transition-all shadow-md">Capture</button>
+                        <button type="button" onClick={stopCamera} className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 font-black text-[10px] uppercase tracking-wider rounded-lg transition-all">Cancel</button>
+                    </div>
+                </div>
+            ) : (
+                <div className="flex flex-col sm:flex-row gap-4 w-full justify-center relative z-10">
+                    <label className="flex-1 sm:max-w-[160px] aspect-square flex flex-col items-center justify-center bg-white hover:bg-gray-50 dark:bg-black/20 dark:hover:bg-black/40 rounded-xl cursor-pointer transition-all border border-gray-200 dark:border-white/10 shadow-sm gap-2 group">
+                        <input type="file" accept="image/jpeg, image/png, image/jpg" className="hidden" onChange={(e) => {
+                            const file = e.target.files[0];
+                            if (file) {
+                                const reader = new FileReader();
+                                reader.onloadend = () => setPhoto(reader.result);
+                                reader.readAsDataURL(file);
+                            }
+                        }} />
+                        <Upload size={24} className="text-primary-500 group-hover:scale-110 transition-transform" />
+                        <span className="font-black text-[10px] text-center uppercase tracking-wider text-gray-600 dark:text-gray-300">Upload<br/>File</span>
+                    </label>
+                    <button type="button" onClick={startCamera} className="flex-1 sm:max-w-[160px] aspect-square flex flex-col items-center justify-center bg-white hover:bg-gray-50 dark:bg-black/20 dark:hover:bg-black/40 rounded-xl cursor-pointer transition-all border border-gray-200 dark:border-white/10 shadow-sm gap-2 group">
+                        <Camera size={24} className="text-primary-500 group-hover:scale-110 transition-transform" />
+                        <span className="font-black text-[10px] text-center uppercase tracking-wider text-gray-600 dark:text-gray-300">Open<br/>Camera</span>
+                    </button>
+                </div>
+            )}
+            {!photo && mode !== 'camera' && (
+               <h4 className="absolute top-4 w-full text-center font-bold text-[9px] text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em]">{label}</h4>
+            )}
+        </div>
     );
 };
 
@@ -310,15 +399,33 @@ const PassportIssuance = () => {
     const [loading, setLoading] = useState(false);
     const [successData, setSuccessData] = useState(null);
     const [error, setError] = useState(null);
+    const [personalPhoto, setPersonalPhoto] = useState('');
+    const [fetchedCitizen, setFetchedCitizen] = useState(null);
+
+    const [searchParams] = useSearchParams();
+    const isRenewal = location.pathname.includes('renew');
+    
+    React.useEffect(() => {
+        if (searchParams.get('ref')) {
+            setReferenceNumber(searchParams.get('ref'));
+        }
+    }, [searchParams]);
 
     const handleSubmit = async () => {
         setLoading(true);
         setError(null);
         try {
-            const response = await fetch('http://localhost:5000/api/admin/issue-passport', {
+            const apiEndpoint = isRenewal ? 'http://localhost:5000/api/admin/renew-passport' : 'http://localhost:5000/api/admin/issue-passport';
+            
+            const response = await fetch(apiEndpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ referenceNumber, passportType: passportType.charAt(0) === 'P' ? 'regular' : 'diplomatic' })
+                body: JSON.stringify({ 
+                    referenceNumber, 
+                    passportType: passportType.charAt(0) === 'P' ? 'regular' : 'diplomatic',
+                    applicationId: searchParams.get('appId'),
+                    personal_photo: personalPhoto
+                })
             });
 
             const data = await response.json();
@@ -341,8 +448,27 @@ const PassportIssuance = () => {
         }
     };
 
-    const handleNext = () => {
-        if (step === 2) {
+    const handleNext = async () => {
+        if (step === 1) {
+            setLoading(true);
+            setError(null);
+            try {
+                const searchRes = await fetch(`http://localhost:5000/api/admin/search-id?query=${encodeURIComponent(referenceNumber)}`);
+                const data = await searchRes.json();
+                const matchedCitizen = data.results?.find(r => r.type === 'citizen' && r.id_number === referenceNumber);
+                if (!matchedCitizen) {
+                    setError('Citizen not found or National ID is invalid. Passports can only be issued to valid Citizens.');
+                    return;
+                }
+                setFetchedCitizen(matchedCitizen);
+                setStep(2);
+            } catch(e) {
+                setError('Failed to retrieve citizen database details.');
+            } finally {
+                setLoading(false);
+            }
+        }
+        else if (step === 3) {
             handleSubmit();
         } else {
             setStep(step + 1);
@@ -358,7 +484,7 @@ const PassportIssuance = () => {
                             <Plane size={32} />
                         </div>
                         <div>
-                            <h2 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight leading-none">{t.issuePassport}</h2>
+                            <h2 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight leading-none">{isRenewal ? (dir === 'rtl' ? 'تجديد الجواز' : 'Renew Passport') : t.issuePassport}</h2>
                             <p className="text-[10px] text-gray-500 dark:text-gold-400 font-black uppercase tracking-[0.2em] mt-2">Issuance Protocol 5.2</p>
                         </div>
                     </div>
@@ -407,14 +533,14 @@ const PassportIssuance = () => {
                     )}
 
                     {step === 2 && (
-                        <div className="space-y-8 animate-fade-in text-center py-6">
+                        <div className="space-y-8 animate-fade-in py-6">
                             <h3 className="text-base font-black text-gray-900 dark:text-white mb-6">Biometric Data Capture</h3>
                             <div className="grid md:grid-cols-2 gap-6">
-                                <div className="p-8 border-2 border-dashed border-gray-200 dark:border-white/10 rounded-2xl group hover:border-primary-500 transition-all cursor-pointer bg-gray-50/50 dark:bg-white/5">
-                                    <Camera size={32} className="text-primary-600 dark:text-gold-400 mx-auto mb-4" />
-                                    <h4 className="font-bold text-sm text-gray-900 dark:text-white uppercase tracking-tighter">Live Face Scan</h4>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider ml-1">Personal Photo</label>
+                                    <PhotoCapture photo={personalPhoto} setPhoto={setPersonalPhoto} label="Upload or Capture Passport Photo" />
                                 </div>
-                                <div className="p-8 border-2 border-dashed border-gray-200 dark:border-white/10 rounded-2xl group hover:border-primary-500 transition-all cursor-pointer bg-gray-50/50 dark:bg-white/5">
+                                <div className="p-8 border-2 border-dashed border-gray-200 dark:border-white/10 rounded-2xl group hover:border-primary-500 transition-all cursor-pointer bg-gray-50/50 dark:bg-white/5 flex flex-col items-center justify-center">
                                     <Fingerprint size={32} className="text-primary-600 dark:text-gold-400 mx-auto mb-4" />
                                     <h4 className="font-bold text-sm text-gray-900 dark:text-white uppercase tracking-tighter">10-Fingerprint Sync</h4>
                                 </div>
@@ -423,6 +549,38 @@ const PassportIssuance = () => {
                     )}
 
                     {step === 3 && (
+                        <div className="space-y-8 animate-fade-in text-center py-6">
+                            <h3 className="text-xl font-black text-gray-900 dark:text-white mb-6">Review & Confirm Request</h3>
+                            <div className="text-left space-y-4 max-w-lg mx-auto">
+                                <div className="p-4 bg-white dark:bg-black/20 rounded-xl">
+                                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Reference Number / Type</p>
+                                    <p className="text-lg font-black font-mono text-gray-900 dark:text-white">{referenceNumber} - {passportType}</p>
+                                </div>
+                                {fetchedCitizen && (
+                                    <>
+                                        <div className="p-4 bg-white dark:bg-black/20 rounded-xl flex justify-between items-center">
+                                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Full Name</span>
+                                            <span className="text-sm font-black text-gray-900 dark:text-white uppercase">{fetchedCitizen.full_name}</span>
+                                        </div>
+                                        <div className="p-4 bg-white dark:bg-black/20 rounded-xl flex justify-between items-center">
+                                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">DOB / Gender</span>
+                                            <span className="text-sm font-black font-mono text-gray-900 dark:text-white">{new Date(fetchedCitizen.dob).toISOString().split('T')[0]} - {fetchedCitizen.gender.toUpperCase()}</span>
+                                        </div>
+                                    </>
+                                )}
+                                <div className="p-4 bg-white dark:bg-black/20 rounded-xl">
+                                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Photo</p>
+                                    {personalPhoto ? (
+                                        <img src={personalPhoto} className="w-32 h-32 object-cover rounded-xl" alt="Preview" />
+                                    ) : (
+                                        <p className="text-sm font-bold text-gray-500">No new photo uploaded</p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {step === 4 && loading && (
                         <div className="space-y-8 animate-fade-in text-center py-12">
                             <div className="w-24 h-24 mx-auto border-[6px] border-primary-50 dark:border-white/5 border-t-primary-600 dark:border-t-gold-500 rounded-full animate-spin"></div>
                             <h3 className="text-xl font-black text-gray-900 dark:text-white mt-6">Processing Issuance...</h3>
@@ -472,7 +630,7 @@ const PassportIssuance = () => {
                                             {/* Photo column */}
                                             <div className="w-[180px] shrink-0">
                                                 <div className="w-full h-[240px] bg-white border border-gray-300 p-1 shadow-sm mb-4">
-                                                    <img src="https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=300" className="w-full h-full object-cover" alt="Holder" />
+                                                    <img src={successData.person.photo || "https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=300"} className="w-full h-full object-cover" alt="Holder" />
                                                 </div>
                                             </div>
                                             
@@ -638,7 +796,7 @@ const PassportIssuance = () => {
                                                     {/* Profile Picture & Gender */}
                                                     <div className="w-[140px] flex flex-col items-center pt-2 relative z-20">
                                                         <div className="w-[120px] h-[155px] bg-white border-2 border-slate-300 shadow-sm overflow-hidden rounded-sm mb-2">
-                                                            <img src="https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=300" className="w-full h-full object-cover" alt="Profile" />
+                                                            <img src={successData.person.photo || "https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=300"} className="w-full h-full object-cover" alt="Profile" />
                                                         </div>
                                                         <div className="text-center w-full bg-white/40 p-1 rounded backdrop-blur-sm">
                                                             <p className="text-[11px] font-black text-green-950 leading-none">Lab/Dheddig / <span dir="rtl">الجنس</span> / Gender</p>
@@ -688,18 +846,25 @@ const CitizenRegistration = () => {
         phone: '',
         email: '',
         address: '',
-        maritalStatus: 'single'
+        maritalStatus: 'single',
+        personal_photo: ''
     });
     const [loading, setLoading] = useState(false);
     const [successData, setSuccessData] = useState(null);
     const [error, setError] = useState(null);
 
+    const [step, setStep] = useState(1);
+
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
 
-    const handleSubmit = async (e) => {
+    const handleFormSubmit = (e) => {
         e.preventDefault();
+        setStep(2);
+    };
+
+    const confirmSubmit = async () => {
         setLoading(true);
         setError(null);
         setSuccessData(null);
@@ -717,8 +882,9 @@ const CitizenRegistration = () => {
                 setSuccessData(data.citizen);
                 // clear form
                 setFormData({
-                    fullName: '', dob: '', gender: 'male', phone: '', email: '', address: '', maritalStatus: 'single'
+                    fullName: '', dob: '', gender: 'male', phone: '', email: '', address: '', maritalStatus: 'single', personal_photo: ''
                 });
+                setStep(1);
             } else {
                 setError(data.message || 'Error saving citizen.');
             }
@@ -772,8 +938,48 @@ const CitizenRegistration = () => {
                                 </button>
                             </div>
                         </div>
+                    ) : step === 2 ? (
+                        <div className="space-y-8 animate-fade-in max-w-lg mx-auto bg-gray-50/50 dark:bg-white/5 p-8 rounded-2xl border border-gray-200 dark:border-white/5">
+                            <h3 className="text-xl font-black text-gray-900 dark:text-white mb-4 text-center">Review Citizen Details</h3>
+                            
+                            <div className="space-y-4">
+                                <div className="p-4 bg-white dark:bg-black/20 rounded-xl flex justify-between">
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Full Name</span>
+                                    <span className="text-sm font-black text-gray-900 dark:text-white">{formData.fullName}</span>
+                                </div>
+                                <div className="p-4 bg-white dark:bg-black/20 rounded-xl flex justify-between">
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Date of Birth</span>
+                                    <span className="text-sm font-black font-mono text-gray-900 dark:text-white">{formData.dob}</span>
+                                </div>
+                                <div className="p-4 bg-white dark:bg-black/20 rounded-xl flex justify-between">
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Gender</span>
+                                    <span className="text-sm font-black text-gray-900 dark:text-white capitalize">{formData.gender}</span>
+                                </div>
+                                <div className="p-4 bg-white dark:bg-black/20 rounded-xl flex justify-between">
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Marital Status</span>
+                                    <span className="text-sm font-black text-gray-900 dark:text-white capitalize">{formData.maritalStatus}</span>
+                                </div>
+                                <div className="p-4 bg-white dark:bg-black/20 rounded-xl flex justify-between">
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Email</span>
+                                    <span className="text-sm font-black text-gray-900 dark:text-white">{formData.email || 'N/A'}</span>
+                                </div>
+                                <div className="p-4 bg-white dark:bg-black/20 rounded-xl flex justify-between">
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Contact Info</span>
+                                    <span className="text-sm font-black font-mono text-gray-900 dark:text-white">{formData.phone}</span>
+                                </div>
+                                <div className="p-4 bg-white dark:bg-black/20 rounded-xl flex justify-between">
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Address</span>
+                                    <span className="text-sm font-black text-gray-900 dark:text-white">{formData.address || 'N/A'}</span>
+                                </div>
+                            </div>
+                            
+                            <div className="flex gap-4 pt-4">
+                                <button onClick={() => setStep(1)} type="button" className="flex-1 bg-gray-200 dark:bg-white/10 hover:bg-gray-300 dark:hover:bg-white/20 text-gray-900 dark:text-white px-6 py-4 rounded-xl font-black text-sm uppercase tracking-widest transition-all">Edit Details</button>
+                                <button onClick={confirmSubmit} disabled={loading} type="button" className="flex-1 bg-primary-600 hover:bg-primary-700 text-white px-6 py-4 rounded-xl font-black text-sm uppercase tracking-widest transition-all">{loading ? 'Processing...' : 'Confirm'}</button>
+                            </div>
+                        </div>
                     ) : (
-                        <form onSubmit={handleSubmit} className="space-y-8 animate-fade-in">
+                        <form onSubmit={handleFormSubmit} className="space-y-8 animate-fade-in">
                             {error && (
                                 <div className="p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl text-xs font-bold flex items-center gap-3">
                                     <AlertCircle size={16} /> {error}
@@ -834,7 +1040,7 @@ const CitizenRegistration = () => {
 
                             <div className="flex justify-end pt-8">
                                 <button type="submit" disabled={loading} className="w-full md:w-auto bg-primary-600 hover:bg-primary-700 text-white px-10 py-4 rounded-xl font-black text-xs uppercase tracking-[0.2em] transition-all shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3">
-                                    {loading ? 'Processing...' : 'Submit & Generate ID'}
+                                    Review Details
                                 </button>
                             </div>
                         </form>
@@ -857,19 +1063,27 @@ const ResidentRegistration = () => {
         visaType: '',
         sponsorName: '',
         phone: '',
+        responsiblePersonPhone: '',
         email: '',
-        address: ''
+        address: '',
+        personal_photo: ''
     });
     const [loading, setLoading] = useState(false);
     const [successData, setSuccessData] = useState(null);
     const [error, setError] = useState(null);
 
+    const [step, setStep] = useState(1);
+
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
 
-    const handleSubmit = async (e) => {
+    const handleFormSubmit = (e) => {
         e.preventDefault();
+        setStep(2);
+    };
+
+    const confirmSubmit = async () => {
         setLoading(true);
         setError(null);
         setSuccessData(null);
@@ -885,10 +1099,10 @@ const ResidentRegistration = () => {
 
             if (data.success) {
                 setSuccessData(data.resident);
-                // clear form
                 setFormData({
-                    fullName: '', dob: '', gender: 'male', nationality: '', passportNumber: '', visaType: '', sponsorName: '', phone: '', email: '', address: ''
+                    fullName: '', dob: '', gender: 'male', nationality: '', passportNumber: '', visaType: '', sponsorName: '', phone: '', responsiblePersonPhone: '', email: '', address: '', personal_photo: ''
                 });
+                setStep(1);
             } else {
                 setError(data.message || 'Error saving resident.');
             }
@@ -942,8 +1156,52 @@ const ResidentRegistration = () => {
                                 </button>
                             </div>
                         </div>
+                    ) : step === 2 ? (
+                        <div className="space-y-8 animate-fade-in max-w-lg mx-auto bg-gray-50/50 dark:bg-white/5 p-8 rounded-2xl border border-gray-200 dark:border-white/5">
+                            <h3 className="text-xl font-black text-gray-900 dark:text-white mb-4 text-center">Review Resident Details</h3>
+                            
+                            <div className="space-y-4">
+                                <div className="p-4 bg-white dark:bg-black/20 rounded-xl flex justify-between">
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Full Name</span>
+                                    <span className="text-sm font-black text-gray-900 dark:text-white">{formData.fullName}</span>
+                                </div>
+                                <div className="p-4 bg-white dark:bg-black/20 rounded-xl flex justify-between">
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Nationality</span>
+                                    <span className="text-sm font-black text-gray-900 dark:text-white">{formData.nationality}</span>
+                                </div>
+                                <div className="p-4 bg-white dark:bg-black/20 rounded-xl flex justify-between">
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Date of Birth</span>
+                                    <span className="text-sm font-black font-mono text-gray-900 dark:text-white">{formData.dob}</span>
+                                </div>
+                                <div className="p-4 bg-white dark:bg-black/20 rounded-xl flex justify-between">
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Gender</span>
+                                    <span className="text-sm font-black text-gray-900 dark:text-white capitalize">{formData.gender}</span>
+                                </div>
+                                <div className="p-4 bg-white dark:bg-black/20 rounded-xl flex justify-between">
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Sponsor & Visa</span>
+                                    <span className="text-sm font-black text-gray-900 dark:text-white">{formData.sponsorName || 'N/A'} ({formData.visaType || 'N/A'})</span>
+                                </div>
+                                <div className="p-4 bg-white dark:bg-black/20 rounded-xl flex justify-between">
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Contact</span>
+                                    <span className="text-sm font-black font-mono text-gray-900 dark:text-white">{formData.phone}</span>
+                                </div>
+                                <div className="p-4 bg-white dark:bg-black/20 rounded-xl flex justify-between">
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Emergency (Sponsor) Phone</span>
+                                    <span className="text-sm font-black font-mono text-gray-900 dark:text-white">{formData.responsiblePersonPhone}</span>
+                                </div>
+                                <div className="p-4 bg-white dark:bg-black/20 rounded-xl flex justify-between">
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Email</span>
+                                    <span className="text-sm font-black text-gray-900 dark:text-white">{formData.email || 'N/A'}</span>
+                                </div>
+                            </div>
+                            
+                            <div className="flex gap-4 pt-4">
+                                <button onClick={() => setStep(1)} type="button" className="flex-1 bg-gray-200 dark:bg-white/10 hover:bg-gray-300 dark:hover:bg-white/20 text-gray-900 dark:text-white px-6 py-4 rounded-xl font-black text-sm uppercase tracking-widest transition-all">Edit Details</button>
+                                <button onClick={confirmSubmit} disabled={loading} type="button" className="flex-1 bg-primary-600 hover:bg-primary-700 text-white px-6 py-4 rounded-xl font-black text-sm uppercase tracking-widest transition-all">{loading ? 'Processing...' : 'Confirm'}</button>
+                            </div>
+                        </div>
                     ) : (
-                        <form onSubmit={handleSubmit} className="space-y-8 animate-fade-in">
+                        <form onSubmit={handleFormSubmit} className="space-y-8 animate-fade-in">
                             {error && (
                                 <div className="p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl text-xs font-bold flex items-center gap-3">
                                     <AlertCircle size={16} /> {error}
@@ -973,7 +1231,18 @@ const ResidentRegistration = () => {
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider ml-1">Nationality *</label>
-                                    <input required name="nationality" value={formData.nationality} onChange={handleChange} type="text" className="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 p-3.5 rounded-xl font-bold text-sm focus:border-primary-500 outline-none text-gray-900 dark:text-white transition-colors" placeholder="e.g. American" />
+                                    <input required list="nationalities" name="nationality" value={formData.nationality} onChange={handleChange} type="text" className="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 p-3.5 rounded-xl font-bold text-sm focus:border-primary-500 outline-none text-gray-900 dark:text-white transition-colors" placeholder="Choose nationality..." />
+                                    <datalist id="nationalities">
+                                        <option value="American" />
+                                        <option value="British" />
+                                        <option value="Canadian" />
+                                        <option value="Ethiopian" />
+                                        <option value="Kenyan" />
+                                        <option value="Djiboutian" />
+                                        <option value="Turkish" />
+                                        <option value="Indian" />
+                                        <option value="Pakistani" />
+                                    </datalist>
                                 </div>
                             </div>
 
@@ -1008,6 +1277,10 @@ const ResidentRegistration = () => {
                                     <input required name="phone" value={formData.phone} onChange={handleChange} type="tel" className="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 p-3.5 rounded-xl font-bold text-sm focus:border-primary-500 outline-none text-gray-900 dark:text-white transition-colors" placeholder="+252 61 0000000" />
                                 </div>
                                 <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider ml-1">Responsible Person Phone (Sponsor) *</label>
+                                    <input required name="responsiblePersonPhone" value={formData.responsiblePersonPhone} onChange={handleChange} type="tel" className="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 p-3.5 rounded-xl font-bold text-sm focus:border-primary-500 outline-none text-gray-900 dark:text-white transition-colors" placeholder="+252 61 0000000" />
+                                </div>
+                                <div className="space-y-2">
                                     <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider ml-1">Email Address</label>
                                     <input name="email" value={formData.email} onChange={handleChange} type="email" className="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 p-3.5 rounded-xl font-bold text-sm focus:border-primary-500 outline-none text-gray-900 dark:text-white transition-colors" placeholder="optional@example.com" />
                                 </div>
@@ -1019,7 +1292,7 @@ const ResidentRegistration = () => {
 
                             <div className="flex justify-end pt-8">
                                 <button type="submit" disabled={loading} className="w-full md:w-auto bg-primary-600 hover:bg-primary-700 text-white px-10 py-4 rounded-xl font-black text-xs uppercase tracking-[0.2em] transition-all shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3">
-                                    {loading ? 'Processing...' : 'Submit & Generate ID'}
+                                    Review Details
                                 </button>
                             </div>
                         </form>
@@ -1038,8 +1311,15 @@ const IssueIDCard = () => {
     const [successData, setSuccessData] = useState(null);
     const [error, setError] = useState(null);
 
-    const handleSubmit = async (e) => {
+    const [personalPhoto, setPersonalPhoto] = useState('');
+    const [step, setStep] = useState(1); // 1 = Form, 2 = Review
+
+    const handleFormSubmit = (e) => {
         e.preventDefault();
+        setStep(2);
+    };
+
+    const confirmSubmit = async () => {
         setLoading(true);
         setError(null);
         setSuccessData(null);
@@ -1048,7 +1328,7 @@ const IssueIDCard = () => {
             const response = await fetch('http://localhost:5000/api/admin/issue-id-card', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ referenceNumber })
+                body: JSON.stringify({ referenceNumber, personal_photo: personalPhoto })
             });
 
             const data = await response.json();
@@ -1165,7 +1445,7 @@ const IssueIDCard = () => {
                                                         {/* Small Hologram Photo Placeholder */}
                                                         <div className="flex flex-col items-center">
                                                             <div className="w-8 h-10 border border-slate-300 rounded overflow-hidden opacity-60 relative mix-blend-multiply mb-0.5">
-                                                                <img src="https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=150" className="w-full h-full object-cover grayscale" alt="Hologram" />
+                                                                <img src={successData.person.photo || "https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=150"} className="w-full h-full object-cover grayscale" alt="Hologram" />
                                                                 <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/40 to-transparent"></div>
                                                             </div>
                                                         </div>
@@ -1175,7 +1455,7 @@ const IssueIDCard = () => {
                                                 {/* Profile Picture & Signature */}
                                                 <div className="w-28 flex flex-col items-center justify-between mt-1">
                                                     <div className="w-[100px] h-[130px] bg-slate-200 border border-slate-300 shadow-inner overflow-hidden rounded-sm">
-                                                        <img src="https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=300" className="w-full h-full object-cover grayscale" alt="Profile" />
+                                                        <img src={successData.person.photo || "https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=300"} className="w-full h-full object-cover grayscale" alt="Profile" />
                                                     </div>
                                                     <div className="text-center w-full mt-auto pb-1 relative z-20">
                                                         <div className="font-['Brush_Script_MT',cursive] text-xl text-slate-800 -rotate-3 mb-0.5">Holder</div>
@@ -1195,17 +1475,51 @@ const IssueIDCard = () => {
                                 </button>
                             </div>
                         </div>
+                    ) : step === 2 ? (
+                        <div className="space-y-8 animate-fade-in max-w-lg mx-auto border border-gray-200 dark:border-white/5 p-8 rounded-2xl bg-gray-50/50 dark:bg-white/5">
+                            <h3 className="text-xl font-black text-gray-900 dark:text-white mb-4 text-center">Review & Confirm</h3>
+                            
+                            <div className="space-y-4">
+                                <div className="p-4 bg-white dark:bg-black/20 rounded-xl">
+                                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Reference Number</p>
+                                    <p className="text-lg font-black font-mono text-gray-900 dark:text-white">{referenceNumber}</p>
+                                </div>
+                                
+                                <div className="p-4 bg-white dark:bg-black/20 rounded-xl">
+                                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Personal Photo</p>
+                                    {personalPhoto ? (
+                                        <img src={personalPhoto} className="w-32 h-32 object-cover rounded-xl" alt="Preview" />
+                                    ) : (
+                                        <p className="text-sm font-bold text-gray-500">No photo uploaded (Will use existing)</p>
+                                    )}
+                                </div>
+                            </div>
+                            
+                            <div className="flex gap-4 pt-4">
+                                <button onClick={() => setStep(1)} type="button" className="flex-1 bg-gray-200 dark:bg-white/10 hover:bg-gray-300 dark:hover:bg-white/20 text-gray-900 dark:text-white px-6 py-4 rounded-xl font-black text-sm uppercase tracking-widest transition-all">
+                                    Edit Details
+                                </button>
+                                <button onClick={confirmSubmit} disabled={loading} type="button" className="flex-1 bg-primary-600 hover:bg-primary-700 text-white px-6 py-4 rounded-xl font-black text-sm uppercase tracking-widest transition-all flex items-center justify-center gap-2">
+                                    {loading ? 'Processing...' : 'Confirm'}
+                                </button>
+                            </div>
+                        </div>
                     ) : (
-                        <form onSubmit={handleSubmit} className="space-y-8 animate-fade-in max-w-lg mx-auto border border-gray-200 dark:border-white/5 p-8 rounded-2xl bg-gray-50/50 dark:bg-white/5">
+                        <form onSubmit={handleFormSubmit} className="space-y-8 animate-fade-in max-w-lg mx-auto border border-gray-200 dark:border-white/5 p-8 rounded-2xl bg-gray-50/50 dark:bg-white/5">
+
                             {error && (
                                 <div className="p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl text-xs font-bold flex items-center gap-3">
                                     <AlertCircle size={16} /> {error}
                                 </div>
                             )}
 
+                            <div className="space-y-2 mb-6">
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider ml-1">Personal Photo (Optional)</label>
+                                <PhotoCapture photo={personalPhoto} setPhoto={setPersonalPhoto} label="Upload or Capture ID Photo (Optional)" />
+                            </div>
+
                             <div className="space-y-4">
                                 <label className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-wider block text-center">
-                                    <ScanFace size={32} className="mx-auto mb-4 text-primary-500" />
                                     Enter 11-Digit Reference Number
                                 </label>
                                 <p className="text-[10px] text-gray-500 dark:text-gray-400 font-bold text-center mb-6">
@@ -1223,11 +1537,12 @@ const IssueIDCard = () => {
                             </div>
 
                             <div className="flex justify-center pt-4">
-                                <button type="submit" disabled={loading || !referenceNumber} className="w-full bg-primary-600 hover:bg-primary-700 text-white px-10 py-5 rounded-2xl font-black text-sm uppercase tracking-[0.2em] transition-all shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3">
-                                    {loading ? 'Processing...' : 'Verify & Issue ID Card'}
+                                <button type="submit" disabled={!referenceNumber} className="w-full bg-primary-600 hover:bg-primary-700 text-white px-10 py-5 rounded-2xl font-black text-sm uppercase tracking-[0.2em] transition-all shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3">
+                                    Review ID Card Request
                                 </button>
                             </div>
                         </form>
+
                     )}
                 </div>
             </div>
@@ -1353,7 +1668,7 @@ const IdentitySearch = () => {
                                                 <div className="flex items-end justify-between pt-1">
                                                     <div className="flex flex-col items-center">
                                                         <div className="w-8 h-10 border border-slate-300 rounded overflow-hidden opacity-60 relative mix-blend-multiply mb-0.5">
-                                                            <img src="https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=150" className="w-full h-full object-cover grayscale" alt="Hologram" />
+                                                            <img src={selectedResult.photo || "https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=150"} className="w-full h-full object-cover grayscale" alt="Hologram" />
                                                             <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/40 to-transparent"></div>
                                                         </div>
                                                     </div>
@@ -1362,7 +1677,7 @@ const IdentitySearch = () => {
 
                                             <div className="w-28 flex flex-col items-center justify-between mt-1">
                                                 <div className="w-[100px] h-[130px] bg-slate-200 border border-slate-300 shadow-inner overflow-hidden rounded-sm">
-                                                    <img src="https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=300" className="w-full h-full object-cover grayscale" alt="Profile" />
+                                                    <img src={selectedResult.photo || "https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=300"} className="w-full h-full object-cover grayscale" alt="Profile" />
                                                 </div>
                                                 <div className="text-center w-full mt-auto pb-1 relative z-20">
                                                     <div className="font-['Brush_Script_MT',cursive] text-xl text-slate-800 -rotate-3 mb-0.5">Holder</div>
@@ -1404,14 +1719,22 @@ const IdentitySearch = () => {
                                     ) : (
                                         <div className="grid gap-6 md:grid-cols-2">
                                             {results.map((r, i) => (
-                                                <div key={i} onClick={() => setSelectedResult(r)} className="bg-gray-50 dark:bg-black/20 p-6 rounded-2xl border border-gray-100 dark:border-white/5 flex gap-4 transition-all cursor-pointer hover:shadow-xl hover:border-primary-300 hover:scale-[1.02]">
+                                                <div key={i} onClick={() => {
+                                                    if (!r.idCards || r.idCards.length === 0) {
+                                                        setError(dir === 'rtl' ? 'لم يتم إصدار بطاقة هوية وطنية لهذا المواطن.' : 'No National ID has been issued for this citizen.');
+                                                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                                                    } else {
+                                                        setSelectedResult(r);
+                                                        setError(null);
+                                                    }
+                                                }} className="bg-gray-50 dark:bg-black/20 p-6 rounded-2xl border border-gray-100 dark:border-white/5 flex gap-4 transition-all cursor-pointer hover:shadow-xl hover:border-primary-300 hover:scale-[1.02]">
                                                     <div className="w-16 h-16 rounded-xl overflow-hidden shrink-0 border border-gray-200 dark:border-white/10 shadow-sm relative">
                                                         {(!r.idCards || r.idCards.length === 0) && (
                                                             <div className="absolute inset-0 bg-white/50 backdrop-blur-[2px] z-10 flex items-center justify-center">
                                                                 <span className="bg-red-500 text-white text-[8px] font-black uppercase px-2 py-0.5 rounded-full rotate-[-15deg] shadow-lg">Unissued</span>
                                                             </div>
                                                         )}
-                                                        <img src="https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=150" className={`w-full h-full object-cover ${(!r.idCards || r.idCards.length === 0) ? 'grayscale opacity-60' : ''}`} alt="Profile" />
+                                                        <img src={r.photo || "https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=150"} className={`w-full h-full object-cover ${(!r.idCards || r.idCards.length === 0) ? 'grayscale opacity-60' : ''}`} alt="Profile" />
                                                     </div>
                                                     <div className="flex-1 flex flex-col justify-between">
                                                         <div className="flex justify-between items-start">
@@ -1453,8 +1776,15 @@ const IdentityRenewal = () => {
     const [successData, setSuccessData] = useState(null);
     const [error, setError] = useState(null);
 
-    const handleSubmit = async (e) => {
-        if (e) e.preventDefault();
+    const [personalPhoto, setPersonalPhoto] = useState('');
+    const [step, setStep] = useState(1);
+
+    const handleFormSubmit = (e) => {
+        e.preventDefault();
+        setStep(2);
+    };
+
+    const confirmSubmit = async () => {
         setLoading(true);
         setError(null);
         setSuccessData(null);
@@ -1463,7 +1793,7 @@ const IdentityRenewal = () => {
             const response = await fetch('http://localhost:5000/api/admin/renew-id', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ referenceNumber, applicationId: appId })
+                body: JSON.stringify({ referenceNumber, applicationId: appId, personal_photo: personalPhoto })
             });
 
             const data = await response.json();
@@ -1471,6 +1801,7 @@ const IdentityRenewal = () => {
             if (data.success) {
                 setSuccessData(data);
                 setReferenceNumber('');
+                setPersonalPhoto('');
             } else {
                 setError(data.message || 'Error processing renewal.');
             }
@@ -1510,8 +1841,32 @@ const IdentityRenewal = () => {
                                 </button>
                             </div>
                         </div>
+                    ) : step === 2 ? (
+                        <div className="space-y-8 animate-fade-in max-w-lg mx-auto border border-gray-200 dark:border-white/5 p-8 rounded-2xl bg-gray-50/50 dark:bg-white/5">
+                            <h3 className="text-xl font-black text-gray-900 dark:text-white mb-4 text-center">Review & Confirm</h3>
+                            
+                            <div className="space-y-4">
+                                <div className="p-4 bg-white dark:bg-black/20 rounded-xl">
+                                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Reference Number</p>
+                                    <p className="text-lg font-black font-mono text-gray-900 dark:text-white">{referenceNumber}</p>
+                                </div>
+                                <div className="p-4 bg-white dark:bg-black/20 rounded-xl">
+                                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Updated Photo</p>
+                                    {personalPhoto ? (
+                                        <img src={personalPhoto} className="w-32 h-32 object-cover rounded-xl" alt="Preview" />
+                                    ) : (
+                                        <p className="text-sm font-bold text-gray-500">No new photo (will use existing)</p>
+                                    )}
+                                </div>
+                            </div>
+                            
+                            <div className="flex gap-4 pt-4">
+                                <button onClick={() => setStep(1)} type="button" className="flex-1 bg-gray-200 dark:bg-white/10 hover:bg-gray-300 dark:hover:bg-white/20 text-gray-900 dark:text-white px-6 py-4 rounded-xl font-black text-sm uppercase tracking-widest transition-all">Edit Details</button>
+                                <button onClick={confirmSubmit} disabled={loading} type="button" className="flex-1 bg-primary-600 hover:bg-primary-700 text-white px-6 py-4 rounded-xl font-black text-sm uppercase tracking-widest transition-all">{loading ? 'Processing...' : 'Confirm'}</button>
+                            </div>
+                        </div>
                     ) : (
-                        <form onSubmit={handleSubmit} className="space-y-8 animate-fade-in max-w-lg mx-auto border border-gray-200 dark:border-white/5 p-8 rounded-2xl bg-gray-50/50 dark:bg-white/5">
+                        <form onSubmit={handleFormSubmit} className="space-y-8 animate-fade-in max-w-lg mx-auto border border-gray-200 dark:border-white/5 p-8 rounded-2xl bg-gray-50/50 dark:bg-white/5">
                             {error && (
                                 <div className="p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl text-xs font-bold flex items-center gap-3">
                                     <AlertCircle size={16} /> {error}
@@ -1532,9 +1887,14 @@ const IdentityRenewal = () => {
                                 />
                             </div>
 
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider ml-1">Update Photo (Optional)</label>
+                                <PhotoCapture photo={personalPhoto} setPhoto={setPersonalPhoto} label="Upload or Capture Updated ID Photo" />
+                            </div>
+
                             <div className="flex justify-center pt-4">
                                 <button type="submit" disabled={loading || !referenceNumber} className="w-full bg-primary-600 hover:bg-primary-700 text-white px-10 py-5 rounded-2xl font-black text-sm uppercase tracking-[0.2em] transition-all shadow-xl disabled:opacity-50 flex items-center justify-center gap-3">
-                                    {loading ? 'Processing...' : 'Verify & Renew Identity'}
+                                    Review Renewal
                                 </button>
                             </div>
                         </form>
@@ -1555,9 +1915,33 @@ const PassportRenewal = () => {
     const [loading, setLoading] = useState(false);
     const [successData, setSuccessData] = useState(null);
     const [error, setError] = useState(null);
+    const [personalPhoto, setPersonalPhoto] = useState('');
+    const [fetchedCitizen, setFetchedCitizen] = useState(null);
+    const [step, setStep] = useState(1);
 
-    const handleSubmit = async (e) => {
+    const handleFormSubmit = async (e) => {
         if (e) e.preventDefault();
+        if (step === 1) {
+            setLoading(true);
+            setError(null);
+            try {
+                const res = await fetch(`http://localhost:5000/api/admin/verify-passport-renewal/${encodeURIComponent(referenceNumber)}`);
+                const data = await res.json();
+                if (!data.success) {
+                    setError(data.message || 'Validation failed. Proceeding blocked.');
+                    return;
+                }
+                setFetchedCitizen(data.citizen);
+                setStep(2);
+            } catch (err) {
+                setError('Failed to query database.');
+            } finally {
+                setLoading(false);
+            }
+        }
+    };
+
+    const confirmSubmit = async () => {
         setLoading(true);
         setError(null);
         setSuccessData(null);
@@ -1566,7 +1950,7 @@ const PassportRenewal = () => {
             const response = await fetch('http://localhost:5000/api/admin/renew-passport', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ referenceNumber, passportType, applicationId: appId })
+                body: JSON.stringify({ referenceNumber, passportType, applicationId: appId, personal_photo: personalPhoto })
             });
 
             const data = await response.json();
@@ -1574,6 +1958,7 @@ const PassportRenewal = () => {
             if (data.success) {
                 setSuccessData(data);
                 setReferenceNumber('');
+                setStep(1);
             } else {
                 setError(data.message || 'Error processing renewal.');
             }
@@ -1616,8 +2001,68 @@ const PassportRenewal = () => {
                                 </button>
                             </div>
                         </div>
+                    ) : step === 2 ? (
+                        <div className="space-y-8 animate-fade-in max-w-lg mx-auto border border-gray-200 dark:border-white/5 p-8 rounded-2xl bg-gray-50/50 dark:bg-white/5">
+                            <h3 className="text-xl font-black text-gray-900 dark:text-white mb-4 text-center">Review Passport Renewal</h3>
+                            
+                            <div className="space-y-4">
+                                {fetchedCitizen && (
+                                    <>
+                                        <div className="p-4 bg-white dark:bg-black/20 rounded-xl flex justify-between items-center">
+                                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Full Name</span>
+                                            <span className="text-sm font-black text-gray-900 dark:text-white uppercase">{fetchedCitizen.full_name}</span>
+                                        </div>
+                                        <div className="p-4 bg-white dark:bg-black/20 rounded-xl flex justify-between items-center">
+                                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">National ID / Ref</span>
+                                            <span className="text-sm font-black font-mono text-gray-900 dark:text-white uppercase">{fetchedCitizen.national_number}</span>
+                                        </div>
+                                        {fetchedCitizen.passports && fetchedCitizen.passports.length > 0 && (
+                                            <>
+                                                <div className="p-4 bg-white dark:bg-black/20 rounded-xl flex justify-between items-center">
+                                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Current Passport</span>
+                                                    <span className="text-sm font-black font-mono text-gray-900 dark:text-white uppercase">{fetchedCitizen.passports[0].passport_number}</span>
+                                                </div>
+                                                <div className="p-4 bg-white dark:bg-black/20 rounded-xl flex justify-between items-center">
+                                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Issue / Expiry</span>
+                                                    <span className="text-sm font-black font-mono text-red-600 dark:text-red-400 uppercase">{new Date(fetchedCitizen.passports[0].issue_date).toISOString().split('T')[0]} / {new Date(fetchedCitizen.passports[0].expiry_date).toISOString().split('T')[0]}</span>
+                                                </div>
+                                            </>
+                                        )}
+                                        <div className="p-4 bg-white dark:bg-black/20 rounded-xl flex justify-between items-center">
+                                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">DOB / Gender / Nat</span>
+                                            <span className="text-sm font-black font-mono text-gray-900 dark:text-white">{new Date(fetchedCitizen.dob).toISOString().split('T')[0]} - {fetchedCitizen.gender.toUpperCase()} - {fetchedCitizen.nationality}</span>
+                                        </div>
+                                        <div className="p-4 bg-white dark:bg-black/20 rounded-xl flex justify-between items-center">
+                                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Phone / Address</span>
+                                            <span className="text-sm font-black font-mono text-gray-900 dark:text-white">{fetchedCitizen.phone} - {fetchedCitizen.address}</span>
+                                        </div>
+                                        <div className="p-4 bg-white dark:bg-black/20 rounded-xl">
+                                            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Stored Profile Photo</p>
+                                            {fetchedCitizen.photo ? (
+                                                <img src={fetchedCitizen.photo} className="w-32 h-32 object-cover rounded-xl" alt="DB Preview" />
+                                            ) : (
+                                                <p className="text-sm font-bold text-gray-500">No previous photo on record</p>
+                                            )}
+                                        </div>
+                                    </>
+                                )}
+                                <div className="p-4 bg-white dark:bg-black/20 rounded-xl mt-4">
+                                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">New Uploaded Photo</p>
+                                    {personalPhoto ? (
+                                        <img src={personalPhoto} className="w-32 h-32 object-cover rounded-xl border border-primary-500" alt="New Preview" />
+                                    ) : (
+                                        <p className="text-sm font-bold text-gray-500">No new photo uploaded</p>
+                                    )}
+                                </div>
+                            </div>
+                            
+                            <div className="flex gap-4 pt-4">
+                                <button onClick={() => setStep(1)} type="button" className="flex-1 bg-gray-200 dark:bg-white/10 hover:bg-gray-300 dark:hover:bg-white/20 text-gray-900 dark:text-white px-6 py-4 rounded-xl font-black text-sm uppercase tracking-widest transition-all">Edit Details</button>
+                                <button onClick={confirmSubmit} disabled={loading} type="button" className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-6 py-4 rounded-xl font-black text-sm uppercase tracking-widest transition-all flex items-center justify-center gap-2">{loading ? 'Processing...' : 'Confirm'}</button>
+                            </div>
+                        </div>
                     ) : (
-                        <form onSubmit={handleSubmit} className="space-y-8 animate-fade-in max-w-lg mx-auto border border-gray-200 dark:border-white/5 p-8 rounded-2xl bg-gray-50/50 dark:bg-white/5">
+                        <form onSubmit={handleFormSubmit} className="space-y-8 animate-fade-in max-w-lg mx-auto border border-gray-200 dark:border-white/5 p-8 rounded-2xl bg-gray-50/50 dark:bg-white/5">
                             {error && (
                                 <div className="p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl text-xs font-bold flex items-center gap-3">
                                     <AlertCircle size={16} /> {error}
@@ -1638,6 +2083,11 @@ const PassportRenewal = () => {
                                 />
                             </div>
 
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider ml-1">Update Photo (Optional)</label>
+                                <PhotoCapture photo={personalPhoto} setPhoto={setPersonalPhoto} label="Upload or Capture Passport Photo" />
+                            </div>
+
                             <div className="space-y-4">
                                 <label className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] block text-center mb-2">
                                     Passport Modality
@@ -1654,7 +2104,7 @@ const PassportRenewal = () => {
 
                             <div className="flex justify-center pt-4">
                                 <button type="submit" disabled={loading || !referenceNumber} className="w-full bg-blue-600 hover:bg-blue-700 text-white px-10 py-5 rounded-2xl font-black text-sm uppercase tracking-[0.2em] transition-all shadow-xl disabled:opacity-50 flex items-center justify-center gap-3">
-                                    {loading ? 'Processing...' : 'Verify & Renew Passport'}
+                                    Review Renewal
                                 </button>
                             </div>
                         </form>
@@ -1750,7 +2200,7 @@ const PassportSearch = () => {
                                     <div className="flex flex-1 px-8 py-4 gap-8">
                                         <div className="w-[180px] shrink-0">
                                             <div className="w-full h-[240px] bg-white border border-gray-300 p-1 shadow-sm mb-4">
-                                                <img src="https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=300" className="w-full h-full object-cover" alt="Holder" />
+                                                <img src={selectedResult.citizen?.photo || "https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=300"} className="w-full h-full object-cover" alt="Holder" />
                                             </div>
                                         </div>
                                         
@@ -1874,9 +2324,22 @@ const PassportSearch = () => {
                                     ) : (
                                         <div className="grid gap-6 md:grid-cols-2">
                                             {results.map((r, i) => (
-                                                <div key={i} onClick={() => setSelectedResult(r)} className="bg-blue-50/50 dark:bg-blue-900/10 p-6 rounded-2xl border border-blue-100 dark:border-blue-500/20 flex gap-4 transition-all cursor-pointer hover:shadow-xl hover:border-blue-300 hover:scale-[1.02]">
-                                                    <div className="w-16 h-16 rounded-xl overflow-hidden shrink-0 border border-blue-200 dark:border-white/10 shadow-sm">
-                                                        <img src="https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=150" className="w-full h-full object-cover" alt="Profile" />
+                                                <div key={i} onClick={() => {
+                                                    if (!r._hasPassport) {
+                                                        setError(dir === 'rtl' ? 'لم يتم إصدار جواز سفر لهذا المواطن.' : 'No Passport has been issued for this citizen.');
+                                                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                                                    } else {
+                                                        setSelectedResult(r);
+                                                        setError(null);
+                                                    }
+                                                }} className="bg-blue-50/50 dark:bg-blue-900/10 p-6 rounded-2xl border border-blue-100 dark:border-blue-500/20 flex gap-4 transition-all cursor-pointer hover:shadow-xl hover:border-blue-300 hover:scale-[1.02]">
+                                                    <div className="w-16 h-16 rounded-xl overflow-hidden shrink-0 border border-blue-200 dark:border-white/10 shadow-sm relative">
+                                                        {(!r._hasPassport) && (
+                                                            <div className="absolute inset-0 bg-white/50 backdrop-blur-[2px] z-10 flex items-center justify-center">
+                                                                <span className="bg-red-500 text-white text-[8px] font-black uppercase px-2 py-0.5 rounded-full rotate-[-15deg] shadow-lg">Unissued</span>
+                                                            </div>
+                                                        )}
+                                                        <img src={r.citizen?.photo || "https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=150"} className={`w-full h-full object-cover ${!r._hasPassport ? 'grayscale opacity-60' : ''}`} alt="Profile" />
                                                     </div>
                                                     <div className="flex-1 flex flex-col justify-between">
                                                         <div className="flex justify-between items-start">

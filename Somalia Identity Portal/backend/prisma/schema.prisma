@@ -18,6 +18,7 @@ model Citizen {
   address        String?   @db.Text
   phone          String?   @db.VarChar(30)
   email          String?   @db.VarChar(120)
+  photo          String?   @db.LongText
   status         CitizenStatus? @default(active)
   created_at     DateTime? @default(now()) @db.DateTime(0)
   updated_at     DateTime? @default(now()) @db.DateTime(0)
@@ -46,7 +47,9 @@ model Resident {
   sponsor_name    String?   @db.VarChar(200)
   address         String?   @db.Text
   phone           String?   @db.VarChar(30)
+  responsible_person_phone String? @db.VarChar(20)
   email           String?   @db.VarChar(120)
+  photo           String?   @db.LongText
   status          ResidentStatus? @default(active)
   created_at      DateTime? @default(now()) @db.DateTime(0)
   updated_at      DateTime? @default(now()) @db.DateTime(0)
@@ -142,6 +145,7 @@ model Application {
   citizen_id     BigInt?   @db.UnsignedBigInt
   resident_id    BigInt?   @db.UnsignedBigInt
   service_type   String    @db.VarChar(100)
+  personal_photo String?   @db.LongText
   status         ApplicationStatus? @default(submitted)
   request_date   DateTime? @default(now()) @db.DateTime(0)
   approval_date  DateTime? @db.DateTime(0)

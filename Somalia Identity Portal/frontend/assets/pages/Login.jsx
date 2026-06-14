@@ -106,7 +106,7 @@ const Login = () => {
                 <div className="relative z-10 text-center space-y-10 max-w-xl backdrop-blur-sm bg-white/5 p-12 rounded-[3rem] border border-white/10 shadow-2xl">
                     <div className="relative w-32 h-32 mx-auto">
                         <div className="absolute inset-0 bg-gold-500 blur-[40px] opacity-30 rounded-full animate-pulse"></div>
-                        <img src="/logo.svg" className="w-full h-full object-contain relative z-10 drop-shadow-2xl" alt="Logo" />
+                        <img src="/logo.png" className="w-full h-full object-contain relative z-10 drop-shadow-2xl" alt="Logo" />
 
                     </div>
 
