@@ -16,7 +16,10 @@ const BirthCertificate = ({ lang }) => {
   });
 
   const [isGenerated, setIsGenerated] = useState(false);
+  const [isLookupMode, setIsLookupMode] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   const [aiNote, setAiNote] = useState('');
 
   const t = translations[lang].birth;
@@ -31,7 +34,7 @@ const BirthCertificate = ({ lang }) => {
 
       // Persist to database via Express API
       const uid = `SOM-B-${Math.floor(1000 + Math.random() * 9000)}-SYNC`;
-      await fetch('http://localhost:5002/api/birth-certificates', {
+      const response = await fetch('http://localhost:5002/api/birth-certificates', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -43,12 +46,54 @@ const BirthCertificate = ({ lang }) => {
         })
       });
 
-      setIsGenerated(true);
+      if (response.ok) {
+        if (lang === 'ar') alert("تم تسجيل شهادة الميلاد بنجاح في قاعدة البيانات الوطنية!");
+        else alert("Birth certificate successfully registered in the national database!");
+        setIsGenerated(true);
+      } else {
+        const errorData = await response.json();
+        alert(`Error: ${errorData.error || 'Failed to save to database'}`);
+        setIsGenerated(true); // Still show for preview
+      }
     } catch (error) {
       console.error("Database save failed:", error);
-      setIsGenerated(true); // Fallback to frontend-only display if backend is offline
+      if (lang === 'ar') alert("فشل الاتصال بقاعدة البيانات. تم إنشاء معاينة فقط.");
+      else alert("Database connection failed. Preview only generated.");
+      setIsGenerated(true); 
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSearch = async () => {
+    if (!searchTerm.trim()) return;
+    setSearchLoading(true);
+    try {
+      const response = await fetch(`http://localhost:5002/api/birth-certificates/${encodeURIComponent(searchTerm)}`);
+      if (response.ok) {
+        const data = await response.json();
+        setFormData({
+          fullName: data.full_name,
+          fatherName: data.father_name,
+          motherName: data.mother_name,
+          dateOfBirth: data.dob.split('T')[0],
+          placeOfBirth: data.place_of_birth,
+          gender: data.gender,
+          hospital: data.hospital,
+          doctor: data.doctor,
+        });
+        setAiNote(data.ai_note || '');
+        setIsGenerated(true);
+      } else {
+        if (lang === 'ar') alert("لم يتم العثور على شهادة الميلاد.");
+        else alert("Birth certificate not found.");
+      }
+    } catch (error) {
+      console.error("Search failed:", error);
+      if (lang === 'ar') alert("خطأ في الاتصال بالخادم.");
+      else alert("Server connection error.");
+    } finally {
+      setSearchLoading(false);
     }
   };
 
@@ -67,28 +112,69 @@ const BirthCertificate = ({ lang }) => {
             <span className="text-slate-400 font-bold text-[8px] uppercase">Vital Records</span>
           </div>
         </div>
-        {isGenerated && (
+        <div className="flex gap-3">
           <motion.button 
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            onClick={() => setIsGenerated(false)} 
-            className="bg-gov-navy text-gov-gold px-4 py-2 rounded-lg font-black text-[9px] uppercase tracking-widest flex items-center gap-2 shadow-lg"
+            onClick={() => {
+              setIsGenerated(false);
+              setIsLookupMode(!isLookupMode);
+            }} 
+            className={`${isLookupMode ? 'bg-gov-gold text-gov-navy' : 'bg-gov-navy text-gov-gold'} px-4 py-2 rounded-lg font-black text-[9px] uppercase tracking-widest flex items-center gap-2 shadow-lg transition-colors`}
           >
-            <i className="fa-solid fa-plus-circle"></i> {t.buttonNew}
+            <i className={`fa-solid ${isLookupMode ? 'fa-plus-circle' : 'fa-search'}`}></i> 
+            {isLookupMode ? (lang === 'ar' ? 'تسجيل جديد' : 'Register New') : (lang === 'ar' ? 'البحث عن شهادة' : 'Search Archive')}
           </motion.button>
-        )}
+        </div>
       </motion.header>
 
       <AnimatePresence mode="wait">
         {!isGenerated ? (
-          <motion.form 
-            key="form"
-            initial={{ opacity: 0, scale: 0.99 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 1.01 }}
-            onSubmit={handleSubmit} 
-            className={`bg-white rounded-3xl p-8 shadow-xl border border-slate-100 ring-1 ring-slate-100 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 relative overflow-hidden ${lang === 'ar' ? 'text-right' : 'text-left'}`}
-          >
+          isLookupMode ? (
+            <motion.div 
+              key="search-view"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="space-y-6 py-10"
+            >
+              <div className={`max-w-xl mx-auto flex gap-3 bg-white p-2 rounded-2xl shadow-xl border border-slate-100 ring-1 ring-slate-100 ${lang === 'ar' ? 'flex-row-reverse' : 'flex-row'}`}>
+                <div className="relative flex-1">
+                  <i className={`fa-solid fa-search absolute ${lang === 'ar' ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-gov-blue text-sm`}></i>
+                  <input 
+                    className={`w-full h-11 ${lang === 'ar' ? 'pr-10 pl-4 text-right' : 'pl-10 pr-4 text-left'} rounded-xl bg-slate-50 border-none focus:ring-2 focus:ring-gov-blue/20 outline-none transition-all font-bold text-gov-navy text-[11px]`}
+                    placeholder={lang === 'ar' ? "ابحث عن شهادة ميلاد..." : "Search birth certificate (UID or Name)..."}
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                  />
+                </div>
+                <button 
+                  onClick={handleSearch}
+                  disabled={searchLoading}
+                  className={`bg-gov-navy text-gov-gold px-6 rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-black transition-all shadow-md flex items-center gap-2 ${lang === 'ar' ? 'flex-row-reverse' : 'flex-row'} cursor-pointer`}
+                >
+                  {searchLoading ? <i className="fa-solid fa-sync fa-spin text-[10px]"></i> : <i className="fa-solid fa-bolt text-[10px]"></i>}
+                  {lang === 'ar' ? "بحث" : "Search"}
+                </button>
+              </div>
+              
+              <div className="text-center py-12 px-6 bg-slate-50/50 rounded-3xl border-2 border-dashed border-slate-100">
+                  <i className="fa-solid fa-archive text-4xl text-slate-200 mb-4 block"></i>
+                  <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">
+                    {lang === 'ar' ? 'أدخل التفاصيل للوصول إلى الأرشيف الفيدرالي' : 'Enter details to access Federal Archives'}
+                  </p>
+              </div>
+            </motion.div>
+          ) : (
+            <motion.form 
+              key="register-view"
+              initial={{ opacity: 0, scale: 0.99 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 1.01 }}
+              onSubmit={handleSubmit} 
+              className={`bg-white rounded-3xl p-8 shadow-xl border border-slate-100 ring-1 ring-slate-100 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 relative overflow-hidden ${lang === 'ar' ? 'text-right' : 'text-left'}`}
+            >
             <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-gov-navy via-gov-gold to-gov-blue"></div>
             
             <div className={`md:col-span-2 flex items-center gap-4 bg-gov-blue/[0.03] p-4 rounded-xl border border-gov-blue/10 ${lang === 'ar' ? 'flex-row-reverse' : 'flex-row'}`}>
@@ -138,9 +224,10 @@ const BirthCertificate = ({ lang }) => {
               )}
             </motion.button>
           </motion.form>
-        ) : (
-          <motion.div 
-            key="certificate"
+        )
+      ) : (
+        <motion.div 
+          key="certificate"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             className="space-y-6"

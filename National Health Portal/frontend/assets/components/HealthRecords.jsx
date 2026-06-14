@@ -285,23 +285,25 @@ const HealthRecords = ({ lang }) => {
           <div className="space-y-6">
             <div className={`max-w-xl mx-auto flex gap-3 bg-white p-2 rounded-2xl shadow-xl border border-slate-100 ring-1 ring-slate-100 ${lang === 'ar' ? 'flex-row-reverse' : 'flex-row'}`}>
               <div className="relative flex-1">
-                <i className={`fa-solid fa-search absolute ${lang === 'ar' ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-gov-blue text-sm`}></i>
+                <i className={`fa-solid fa-id-card absolute ${lang === 'ar' ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-gov-blue text-sm`}></i>
                 <input 
                   className={`w-full h-11 ${lang === 'ar' ? 'pr-10 pl-4 text-right' : 'pl-10 pr-4 text-left'} rounded-xl bg-slate-50 border-none focus:ring-2 focus:ring-gov-blue/20 outline-none transition-all font-bold text-gov-navy text-[11px]`}
-                  placeholder={t.searchPlaceholder}
+                  placeholder={lang === 'ar' ? "ابحث برقم الهوية الوطنية أو الاسم..." : "Search by Citizen ID or Full Name..."}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                 />
               </div>
-              <button 
+              <motion.button 
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
                 onClick={handleSearch}
                 disabled={searchLoading}
                 className={`bg-gov-navy text-gov-gold px-6 rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-black transition-all shadow-md flex items-center gap-2 ${lang === 'ar' ? 'flex-row-reverse' : 'flex-row'} cursor-pointer`}
               >
-                {searchLoading ? <i className="fa-solid fa-sync fa-spin text-[10px]"></i> : <i className="fa-solid fa-bolt text-[10px]"></i>}
-                Pulse Sync
-              </button>
+                {searchLoading ? <i className="fa-solid fa-sync fa-spin text-[10px]"></i> : <i className="fa-solid fa-search text-[10px]"></i>}
+                {lang === 'ar' ? "بحث في القاعدة" : "Sync Records"}
+              </motion.button>
             </div>
 
             <AnimatePresence mode="wait">

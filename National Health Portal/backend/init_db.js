@@ -20,6 +20,7 @@ connection.connect((err) => {
 
     // 1. Create tables if they do not exist
     const schemaSql = `
+    CREATE DATABASE IF NOT EXISTS somali_national_gateway;
     USE somali_national_gateway;
 
     CREATE TABLE IF NOT EXISTS birth_certificates (

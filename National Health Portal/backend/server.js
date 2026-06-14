@@ -141,6 +141,30 @@ app.post('/api/birth-certificates', async (req, res) => {
     }
 });
 
+// Search Birth Certificate by UID or Name
+app.get('/api/birth-certificates/:searchTerm', async (req, res) => {
+    const { searchTerm } = req.params;
+    try {
+        const certificates = await prisma.birth_certificates.findMany({
+            where: {
+                OR: [
+                    { uid: searchTerm },
+                    { full_name: { contains: searchTerm } }
+                ]
+            }
+        });
+        
+        if (certificates.length === 0) {
+            return res.status(404).json({ error: 'Birth certificate not found' });
+        }
+        
+        res.json(certificates[0]);
+    } catch (error) {
+        console.error('Search Birth Certificate Error:', error);
+        res.status(500).json({ error: 'Database search failed', details: error.message });
+    }
+});
+
 // Submit Death Certificate
 app.post('/api/death-certificates', async (req, res) => {
     try {
@@ -167,6 +191,30 @@ app.post('/api/death-certificates', async (req, res) => {
     } catch (error) {
         console.error('Death Registration Error:', error);
         res.status(500).json({ error: 'Database save failed', details: error.message });
+    }
+});
+
+// Search Death Certificate by Registry Number or Name
+app.get('/api/death-certificates/:searchTerm', async (req, res) => {
+    const { searchTerm } = req.params;
+    try {
+        const certificates = await prisma.death_certificates.findMany({
+            where: {
+                OR: [
+                    { registry_number: searchTerm },
+                    { full_name: { contains: searchTerm } }
+                ]
+            }
+        });
+        
+        if (certificates.length === 0) {
+            return res.status(404).json({ error: 'Death certificate not found' });
+        }
+        
+        res.json(certificates[0]);
+    } catch (error) {
+        console.error('Search Death Certificate Error:', error);
+        res.status(500).json({ error: 'Database search failed', details: error.message });
     }
 });
 
