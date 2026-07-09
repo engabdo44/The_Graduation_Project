@@ -139,7 +139,7 @@ CREATE TABLE applications (
     citizen_id BIGINT UNSIGNED NULL,
     resident_id BIGINT UNSIGNED NULL,
     service_type VARCHAR(100) NOT NULL,
-    status ENUM('submitted','under_review','approved','rejected') DEFAULT 'submitted',
+    status ENUM('submitted','under_review','approved','rejected','printing_queue','printed','completed') DEFAULT 'submitted',
     request_date DATETIME DEFAULT CURRENT_TIMESTAMP,
     approval_date DATETIME NULL,
     FOREIGN KEY (citizen_id) REFERENCES citizens(citizen_id),
@@ -238,6 +238,22 @@ CREATE TABLE system_logs (
     action VARCHAR(255) NOT NULL,
     date_time DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (employee_id) REFERENCES employees(employee_id)
+) ENGINE=InnoDB;
+
+-- =========================================
+-- 15) Print Queue
+-- =========================================
+CREATE TABLE print_queue (
+    print_id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    document_type VARCHAR(50) NOT NULL,
+    document_number VARCHAR(50) NOT NULL,
+    applicant_name VARCHAR(200) NOT NULL,
+    request_number VARCHAR(50),
+    request_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    status ENUM('pending', 'printed') DEFAULT 'pending',
+    printed_by VARCHAR(200),
+    print_date DATE,
+    print_time VARCHAR(50)
 ) ENGINE=InnoDB;
 
 SET FOREIGN_KEY_CHECKS = 1;

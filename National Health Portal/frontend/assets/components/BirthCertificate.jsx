@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { generateBirthCertificateCopy } from '../services/geminiService';
 import { translations } from '../translations';
+import { NotificationContainer } from './Notification';
 
 const BirthCertificate = ({ lang }) => {
   const [formData, setFormData] = useState({
@@ -21,9 +22,21 @@ const BirthCertificate = ({ lang }) => {
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [aiNote, setAiNote] = useState('');
+  const [notifications, setNotifications] = useState([]);
+  const [searchResults, setSearchResults] = useState([]);
+  const [selectedResult, setSelectedResult] = useState(null);
 
   const t = translations[lang].birth;
   const common = translations[lang].common;
+
+  const addNotification = (type, message) => {
+    const id = Date.now();
+    setNotifications(prev => [...prev, { id, type, message }]);
+  };
+
+  const removeNotification = (id) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -47,18 +60,16 @@ const BirthCertificate = ({ lang }) => {
       });
 
       if (response.ok) {
-        if (lang === 'ar') alert("تم تسجيل شهادة الميلاد بنجاح في قاعدة البيانات الوطنية!");
-        else alert("Birth certificate successfully registered in the national database!");
+        addNotification('success', lang === 'ar' ? 'تم تسجيل شهادة الميلاد بنجاح في قاعدة البيانات الوطنية!' : 'Birth certificate successfully registered in the national database!');
         setIsGenerated(true);
       } else {
         const errorData = await response.json();
-        alert(`Error: ${errorData.error || 'Failed to save to database'}`);
-        setIsGenerated(true); // Still show for preview
+        addNotification('error', errorData.error || (lang === 'ar' ? 'فشل الحفظ في قاعدة البيانات' : 'Failed to save to database'));
+        setIsGenerated(true);
       }
     } catch (error) {
       console.error("Database save failed:", error);
-      if (lang === 'ar') alert("فشل الاتصال بقاعدة البيانات. تم إنشاء معاينة فقط.");
-      else alert("Database connection failed. Preview only generated.");
+      addNotification('warning', lang === 'ar' ? 'فشل الاتصال بقاعدة البيانات. تم إنشاء معاينة فقط.' : 'Database connection failed. Preview only generated.');
       setIsGenerated(true); 
     } finally {
       setLoading(false);
@@ -66,39 +77,60 @@ const BirthCertificate = ({ lang }) => {
   };
 
   const handleSearch = async () => {
-    if (!searchTerm.trim()) return;
+    if (!searchTerm.trim()) {
+      addNotification('warning', lang === 'ar' ? 'الرجاء إدخال مصطلح البحث' : 'Please enter a search term');
+      return;
+    }
     setSearchLoading(true);
+    setSearchResults([]);
+    setSelectedResult(null);
     try {
       const response = await fetch(`http://localhost:5002/api/birth-certificates/${encodeURIComponent(searchTerm)}`);
       if (response.ok) {
         const data = await response.json();
-        setFormData({
-          fullName: data.full_name,
-          fatherName: data.father_name,
-          motherName: data.mother_name,
-          dateOfBirth: data.dob.split('T')[0],
-          placeOfBirth: data.place_of_birth,
-          gender: data.gender,
-          hospital: data.hospital,
-          doctor: data.doctor,
-        });
-        setAiNote(data.ai_note || '');
-        setIsGenerated(true);
+        if (Array.isArray(data) && data.length > 0) {
+          setSearchResults(data);
+          if (data.length === 1) {
+            // Auto-select if only one result
+            handleSelectResult(data[0]);
+          }
+        } else if (data && typeof data === 'object') {
+          // Single result (backward compatibility)
+          handleSelectResult(data);
+        } else {
+          addNotification('info', lang === 'ar' ? 'لم يتم العثور على شهادات الميلاد' : 'No birth certificates found');
+        }
       } else {
-        if (lang === 'ar') alert("لم يتم العثور على شهادة الميلاد.");
-        else alert("Birth certificate not found.");
+        const errorData = await response.json();
+        addNotification('error', errorData.error || (lang === 'ar' ? 'لم يتم العثور على شهادة الميلاد' : 'Birth certificate not found'));
       }
     } catch (error) {
       console.error("Search failed:", error);
-      if (lang === 'ar') alert("خطأ في الاتصال بالخادم.");
-      else alert("Server connection error.");
+      addNotification('error', lang === 'ar' ? 'خطأ في الاتصال بالخادم' : 'Server connection error');
     } finally {
       setSearchLoading(false);
     }
   };
 
+  const handleSelectResult = (data) => {
+    setFormData({
+      fullName: data.full_name,
+      fatherName: data.father_name,
+      motherName: data.mother_name,
+      dateOfBirth: data.dob.split('T')[0],
+      placeOfBirth: data.place_of_birth,
+      gender: data.gender,
+      hospital: data.hospital,
+      doctor: data.doctor,
+    });
+    setAiNote(data.ai_note || '');
+    setSelectedResult(data);
+    setIsGenerated(true);
+  };
+
   return (
     <div className={`max-w-4xl mx-auto space-y-6 ${lang === 'ar' ? 'font-arabic' : ''}`}>
+      <NotificationContainer notifications={notifications} removeNotification={removeNotification} lang={lang} />
       <motion.header 
         initial={{ y: -5, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -159,12 +191,48 @@ const BirthCertificate = ({ lang }) => {
                 </button>
               </div>
               
-              <div className="text-center py-12 px-6 bg-slate-50/50 rounded-3xl border-2 border-dashed border-slate-100">
-                  <i className="fa-solid fa-archive text-4xl text-slate-200 mb-4 block"></i>
-                  <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">
-                    {lang === 'ar' ? 'أدخل التفاصيل للوصول إلى الأرشيف الفيدرالي' : 'Enter details to access Federal Archives'}
-                  </p>
-              </div>
+              {searchResults.length > 1 && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-white rounded-2xl p-6 shadow-xl border border-slate-100"
+                >
+                  <h3 className={`text-sm font-black text-gov-navy uppercase tracking-wider mb-4 ${lang === 'ar' ? 'text-right' : 'text-left'}`}>
+                    {lang === 'ar' ? 'نتائج البحث' : 'Search Results'} ({searchResults.length})
+                  </h3>
+                  <div className="space-y-3">
+                    {searchResults.map((result, index) => (
+                      <motion.button
+                        key={result.birth_id || index}
+                        whileHover={{ scale: 1.01 }}
+                        whileTap={{ scale: 0.99 }}
+                        onClick={() => handleSelectResult(result)}
+                        className={`w-full p-4 rounded-xl border border-slate-200 hover:border-gov-blue hover:bg-gov-blue/5 transition-all text-left ${lang === 'ar' ? 'text-right' : 'text-left'}`}
+                      >
+                        <div className={`flex items-center gap-3 ${lang === 'ar' ? 'flex-row-reverse' : 'flex-row'}`}>
+                          <div className="w-10 h-10 bg-gov-navy/10 rounded-lg flex items-center justify-center shrink-0">
+                            <i className="fa-solid fa-baby text-gov-navy"></i>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-gov-navy font-black text-sm truncate">{result.full_name}</p>
+                            <p className="text-slate-400 text-[10px] font-medium">{result.uid} • {result.dob.split('T')[0]}</p>
+                          </div>
+                          <i className="fa-solid fa-chevron-right text-slate-300 text-xs"></i>
+                        </div>
+                      </motion.button>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+              
+              {searchResults.length === 0 && !selectedResult && (
+                <div className="text-center py-12 px-6 bg-slate-50/50 rounded-3xl border-2 border-dashed border-slate-100">
+                    <i className="fa-solid fa-archive text-4xl text-slate-200 mb-4 block"></i>
+                    <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">
+                      {lang === 'ar' ? 'أدخل التفاصيل للوصول إلى الأرشيف الفيدرالي' : 'Enter details to access Federal Archives'}
+                    </p>
+                </div>
+              )}
             </motion.div>
           ) : (
             <motion.form 

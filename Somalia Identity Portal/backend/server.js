@@ -3,6 +3,80 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const { PrismaClient } = require('@prisma/client');
 
+// Validation helpers
+const validateText = (value, fieldName) => {
+  if (!value || value.trim() === '') {
+    throw new Error(`${fieldName} is required`);
+  }
+  const textRegex = /^[a-zA-Z\u0600-\u06FF\u0750-\u077F\s\-'\.]+$/;
+  if (!textRegex.test(value)) {
+    throw new Error(`${fieldName} should only contain letters`);
+  }
+  if (value.length > 200) {
+    throw new Error(`${fieldName} is too long (max 200 characters)`);
+  }
+};
+
+const validateNumeric = (value, fieldName, minLength = 1, maxLength = 20) => {
+  if (!value || value.trim() === '') {
+    throw new Error(`${fieldName} is required`);
+  }
+  const numericRegex = /^\d+$/;
+  if (!numericRegex.test(value)) {
+    throw new Error(`${fieldName} should only contain numbers`);
+  }
+  if (value.length < minLength) {
+    throw new Error(`${fieldName} must be at least ${minLength} digits`);
+  }
+  if (value.length > maxLength) {
+    throw new Error(`${fieldName} must be at most ${maxLength} digits`);
+  }
+};
+
+const validateDate = (value, fieldName, allowFuture = false, allowPast = true) => {
+  if (!value) {
+    throw new Error(`${fieldName} is required`);
+  }
+  const date = new Date(value);
+  if (isNaN(date.getTime())) {
+    throw new Error(`${fieldName} is not a valid date`);
+  }
+  const now = new Date();
+  if (!allowFuture && date > now) {
+    throw new Error(`${fieldName} cannot be in the future`);
+  }
+  if (!allowPast && date < now) {
+    throw new Error(`${fieldName} cannot be in the past`);
+  }
+};
+
+const validateEmail = (value, fieldName) => {
+  if (!value || value.trim() === '') {
+    throw new Error(`${fieldName} is required`);
+  }
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(value)) {
+    throw new Error(`${fieldName} format is invalid`);
+  }
+  if (value.length > 120) {
+    throw new Error(`${fieldName} is too long`);
+  }
+};
+
+const validatePhone = (value, fieldName) => {
+  if (!value || value.trim() === '') {
+    throw new Error(`${fieldName} is required`);
+  }
+  const phoneRegex = /^\+?[\d\s\-]+$/;
+  if (!phoneRegex.test(value)) {
+    throw new Error(`${fieldName} format is invalid`);
+  }
+  const digitsOnly = value.replace(/\D/g, '');
+  if (digitsOnly.length < 8 || digitsOnly.length > 15) {
+    throw new Error(`${fieldName} must be between 8-15 digits`);
+  }
+};
+
 dotenv.config();
 
 // BigInt serialization fix
@@ -32,6 +106,160 @@ app.get('/api/status', async (req, res) => {
         res.status(500).json({ error: 'Database connection failed' });
     }
 });
+
+// Admin Citizens Search
+app.get('/api/admin/citizens/search', async (req, res) => {
+    try {
+        const query = req.query.q;
+        if (!query) return res.json({ success: true, citizens: [] });
+        
+        // Search by citizen_id (if numeric) or full_name
+        let whereClause = {
+            OR: [
+                { full_name: { contains: query } },
+                { national_id_number: { contains: query } }
+            ]
+        };
+        
+        if (!isNaN(parseInt(query))) {
+             whereClause.OR.push({ citizen_id: BigInt(query) });
+        }
+        
+        const citizens = await prisma.citizen.findMany({
+            where: whereClause,
+            take: 10
+        });
+        
+        res.json({
+            success: true,
+            citizens: JSON.parse(JSON.stringify(citizens, (key, value) => typeof value === 'bigint' ? value.toString() : value))
+        });
+    } catch (err) {
+        console.error('Citizens Search Error:', err);
+        res.status(500).json({ success: false, error: 'Database search failed' });
+    }
+});
+
+// Admin Direct Reprint - Revenue Tracker
+app.post('/api/admin/birth-certificates/reprint', async (req, res) => {
+    try {
+        const { citizen_id } = req.body;
+        
+        await prisma.revenue.create({
+            data: {
+                transaction_type: 'Health',
+                service_name: 'Birth Certificate Reprint',
+                amount: 10.00,
+                status: 'completed',
+                payment_method: 'Admin Issue'
+            }
+        });
+        
+        res.json({ success: true, message: 'Reprint action recorded and revenue updated.' });
+    } catch (err) {
+        res.status(500).json({ success: false, error: 'Failed to record reprint.' });
+    }
+});
+
+// Admin Dashboard Statistics — live data endpoint
+app.get('/api/admin/dashboard-stats', async (req, res) => {
+    try {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
+        const [
+            totalRequests,
+            pendingRequests,
+            todayApprovals,
+            revenueAgg,
+            statusDist,
+            serviceUsage,
+        ] = await Promise.all([
+            // Total requests
+            prisma.application.count(),
+            // Pending verification
+            prisma.application.count({ where: { status: 'pending' } }),
+            // Today's approvals
+            prisma.application.count({
+                where: {
+                    status: { in: ['approved', 'printing_queue', 'completed'] },
+                    approval_date: { gte: today, lt: tomorrow }
+                }
+            }),
+            // Total revenue from completed transactions
+            prisma.revenue.aggregate({
+                where: { status: 'completed' },
+                _sum: { amount: true }
+            }),
+            // Status distribution
+            prisma.application.groupBy({
+                by: ['status'],
+                _count: { application_id: true }
+            }),
+            // Service type usage
+            prisma.application.groupBy({
+                by: ['service_type'],
+                _count: { application_id: true },
+                orderBy: { _count: { application_id: 'desc' } }
+            }),
+        ]);
+
+        // Build 7-day trends (daily approved vs submitted)
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+        sevenDaysAgo.setHours(0, 0, 0, 0);
+
+        const recentApps = await prisma.application.findMany({
+            where: { request_date: { gte: sevenDaysAgo } },
+            select: { request_date: true, status: true }
+        });
+
+        // Group into daily buckets
+        const dailyMap = {};
+        for (let i = 0; i < 7; i++) {
+            const d = new Date(sevenDaysAgo);
+            d.setDate(d.getDate() + i);
+            const key = d.toISOString().split('T')[0];
+            dailyMap[key] = { date: key, submitted: 0, approved: 0, rejected: 0, completed: 0 };
+        }
+        recentApps.forEach(a => {
+            const key = a.request_date ? new Date(a.request_date).toISOString().split('T')[0] : null;
+            if (key && dailyMap[key]) {
+                dailyMap[key].submitted++;
+                if (['approved', 'printing_queue'].includes(a.status)) dailyMap[key].approved++;
+                if (a.status === 'rejected') dailyMap[key].rejected++;
+                if (a.status === 'completed') dailyMap[key].completed++;
+            }
+        });
+
+        const bigIntFix = (v) => typeof v === 'bigint' ? Number(v) : v;
+
+        res.json({
+            success: true,
+            stats: {
+                totalRequests: bigIntFix(totalRequests),
+                pendingRequests: bigIntFix(pendingRequests),
+                todayApprovals: bigIntFix(todayApprovals),
+                totalRevenue: parseFloat(revenueAgg._sum.amount || 0),
+                statusDistribution: statusDist.map(s => ({
+                    status: s.status,
+                    count: bigIntFix(s._count.application_id)
+                })),
+                serviceUsage: serviceUsage.map(s => ({
+                    service_type: s.service_type,
+                    count: bigIntFix(s._count.application_id)
+                })),
+                dailyTrend: Object.values(dailyMap)
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching dashboard stats:', error);
+        res.status(500).json({ error: 'Failed to fetch dashboard stats', details: error.message });
+    }
+});
+
 
 // Login endpoint
 app.post('/api/login', async (req, res) => {
@@ -156,6 +384,30 @@ app.post('/api/admin/register-citizen', async (req, res) => {
     // Optional: add authorization check here to ensure req.user is an admin
 
     try {
+        // Validation
+        validateText(fullName, 'Full Name');
+        validateDate(dob, 'Date of Birth', false, true);
+        
+        if (!['male', 'female'].includes(gender)) {
+            throw new Error('Invalid gender value');
+        }
+        
+        if (phone) {
+            validatePhone(phone, 'Phone Number');
+        }
+        
+        if (email) {
+            validateEmail(email, 'Email');
+        }
+        
+        if (address) {
+            validateText(address, 'Address');
+        }
+        
+        if (maritalStatus && !['single', 'married', 'divorced', 'widowed'].includes(maritalStatus)) {
+            throw new Error('Invalid marital status');
+        }
+
         // Generating an 11-digit unique national number
         let nationalNumber = '';
         let isUnique = false;
@@ -220,7 +472,7 @@ app.post('/api/admin/register-citizen', async (req, res) => {
 
     } catch (error) {
         console.error('Error registering citizen:', error);
-        res.status(500).json({ error: 'Failed to register citizen', details: error.message });
+        res.status(400).json({ error: error.message || 'Failed to register citizen', details: error.message });
     }
 });
 
@@ -231,6 +483,50 @@ app.post('/api/admin/register-resident', async (req, res) => {
     // Optional: authorization check here
 
     try {
+        // Validation
+        validateText(fullName, 'Full Name');
+        validateDate(dob, 'Date of Birth', false, true);
+        
+        if (!['male', 'female'].includes(gender)) {
+            throw new Error('Invalid gender value');
+        }
+        
+        validateText(nationality, 'Nationality');
+        
+        if (passportNumber) {
+            const passportRegex = /^[A-Za-z0-9]+$/;
+            if (!passportRegex.test(passportNumber)) {
+                throw new Error('Passport number should only contain letters and numbers');
+            }
+            if (passportNumber.length < 6 || passportNumber.length > 15) {
+                throw new Error('Passport number must be between 6-15 characters');
+            }
+        }
+        
+        if (visaType) {
+            validateText(visaType, 'Visa Type');
+        }
+        
+        if (sponsorName) {
+            validateText(sponsorName, 'Sponsor Name');
+        }
+        
+        if (phone) {
+            validatePhone(phone, 'Phone Number');
+        }
+        
+        if (responsiblePersonPhone) {
+            validatePhone(responsiblePersonPhone, 'Responsible Person Phone');
+        }
+        
+        if (email) {
+            validateEmail(email, 'Email');
+        }
+        
+        if (address) {
+            validateText(address, 'Address');
+        }
+
         // Generating an 11-digit unique residence number
         let residenceNumber = '';
         let isUnique = false;
@@ -295,7 +591,7 @@ app.post('/api/admin/register-resident', async (req, res) => {
 
     } catch (error) {
         console.error('Error registering resident:', error);
-        res.status(500).json({ error: 'Failed to register resident', details: error.message });
+        res.status(400).json({ error: error.message || 'Failed to register resident', details: error.message });
     }
 });
 
@@ -372,9 +668,19 @@ app.post('/api/admin/issue-id-card', async (req, res) => {
             newIdCard.id_type = 'resident';
         }
 
+        await prisma.printQueue.create({
+            data: {
+                document_type: 'National ID',
+                document_number: referenceNumber,
+                applicant_name: citizen ? citizen.full_name : resident.full_name,
+                request_number: referenceNumber,
+                status: 'pending'
+            }
+        });
+
         res.json({
             success: true,
-            message: `${idType === 'citizen' ? 'National' : 'Residence'} ID Card issued successfully.`,
+            message: `${idType === 'citizen' ? 'National' : 'Residence'} ID Card issued successfully. Sent to Printing Queue.`,
             idCard: newIdCard,
             person: citizen || resident
         });
@@ -408,6 +714,21 @@ app.post('/api/admin/renew-id', async (req, res) => {
                 await prisma.$executeRawUnsafe(`UPDATE residents SET photo = ? WHERE resident_id = ?`, personal_photo, personIdValue);
                 resident.photo = personal_photo;
             }
+        }
+
+        // Admin Validation Rules
+        const activeCard = citizen 
+            ? await prisma.citizenIdCard.findFirst({ where: { citizen_id: personIdValue }, orderBy: { issue_date: 'desc' } })
+            : await prisma.residentIdCard.findFirst({ where: { resident_id: personIdValue }, orderBy: { issue_date: 'desc' } });
+            
+        if (!activeCard) {
+            return res.status(400).json({ success: false, message: 'National ID renewal is not available because no active National ID record was found.' });
+        }
+
+        const now = new Date();
+        const twoYearsFromNow = new Date(now.getFullYear() + 2, now.getMonth(), now.getDate());
+        if (new Date(activeCard.expiry_date) > twoYearsFromNow) {
+            return res.status(400).json({ success: false, message: 'National ID renewal is only allowed when the card has less than 2 years remaining before expiration.' });
         }
 
         // Step 1: Mark all existing active cards as expired/cancelled
@@ -470,13 +791,37 @@ app.post('/api/admin/renew-id', async (req, res) => {
         if (applicationId && applicationId !== 'null' && applicationId !== 'undefined') {
             await prisma.application.update({
                 where: { application_id: BigInt(applicationId) },
-                data: { status: 'completed' }
+                data: { status: 'printing_queue' }
             });
         }
 
+        // Record Revenue for Renewal ($100)
+        await prisma.revenue.create({
+            data: {
+                transaction_type: 'National ID',
+                service_name: 'National ID Renewal',
+                amount: 100.00,
+                applicant_name: citizen ? citizen.full_name : resident.full_name,
+                id_number: referenceNumber,
+                application_id: applicationId && applicationId !== 'null' ? String(applicationId) : referenceNumber,
+                payment_method: 'card',
+                status: 'completed'
+            }
+        }).catch(() => null);
+
+        await prisma.printQueue.create({
+            data: {
+                document_type: 'National ID',
+                document_number: referenceNumber,
+                applicant_name: citizen ? citizen.full_name : resident.full_name,
+                request_number: String(applicationId && applicationId !== 'null' ? applicationId : referenceNumber),
+                status: 'pending'
+            }
+        });
+
         res.json({
             success: true,
-            message: 'Identity renewed successfully.',
+            message: 'Identity renewed successfully. Sent to Printing Queue.',
             idCard: newIdCard,
             person: citizen || resident
         });
@@ -524,13 +869,23 @@ app.post('/api/admin/issue-passport', async (req, res) => {
         if (applicationId && applicationId !== 'null' && applicationId !== 'undefined') {
             await prisma.application.update({
                 where: { application_id: BigInt(applicationId) },
-                data: { status: 'completed' }
+                data: { status: 'printing_queue' }
             });
         }
 
+        await prisma.printQueue.create({
+            data: {
+                document_type: 'Passport',
+                document_number: passportNumber,
+                applicant_name: citizen.full_name,
+                request_number: String(applicationId && applicationId !== 'null' ? applicationId : referenceNumber),
+                status: 'pending'
+            }
+        });
+
         res.json({
             success: true,
-            message: 'Passport issued successfully.',
+            message: 'Passport issued successfully. Sent to Printing Queue.',
             passport: newPassport,
             person: citizen
         });
@@ -555,6 +910,22 @@ app.post('/api/admin/renew-passport', async (req, res) => {
         if (personal_photo) {
             await prisma.$executeRawUnsafe(`UPDATE citizens SET photo = ? WHERE citizen_id = ?`, personal_photo, citizen.citizen_id);
             citizen.photo = personal_photo;
+        }
+
+        // Admin Validation Rules
+        const existingPassport = await prisma.passport.findFirst({
+            where: { citizen_id: citizen.citizen_id },
+            orderBy: { issue_date: 'desc' }
+        });
+
+        if (!existingPassport) {
+            return res.status(400).json({ success: false, message: 'Passport renewal is not available because no active passport record was found.' });
+        }
+
+        const now = new Date();
+        const threeYearsFromNow = new Date(now.getFullYear() + 3, now.getMonth(), now.getDate());
+        if (new Date(existingPassport.expiry_date) > threeYearsFromNow) {
+            return res.status(400).json({ success: false, message: 'Passport renewal is only allowed when the passport has less than 3 years remaining before expiration.' });
         }
 
         // Step 1: Mark all existing active passports as expired
@@ -584,13 +955,37 @@ app.post('/api/admin/renew-passport', async (req, res) => {
         if (applicationId && applicationId !== 'null' && applicationId !== 'undefined') {
             await prisma.application.update({
                 where: { application_id: BigInt(applicationId) },
-                data: { status: 'completed' }
+                data: { status: 'printing_queue' }
             });
         }
 
+        // Record Revenue for Renewal ($100)
+        await prisma.revenue.create({
+            data: {
+                transaction_type: 'Passport',
+                service_name: 'Passport Renewal',
+                amount: 100.00,
+                applicant_name: citizen.full_name,
+                id_number: referenceNumber,
+                application_id: applicationId && applicationId !== 'null' ? String(applicationId) : referenceNumber,
+                payment_method: 'card',
+                status: 'completed'
+            }
+        }).catch(() => null);
+
+        await prisma.printQueue.create({
+            data: {
+                document_type: 'Passport',
+                document_number: passportNumber,
+                applicant_name: citizen.full_name,
+                request_number: String(applicationId && applicationId !== 'null' ? applicationId : referenceNumber),
+                status: 'pending'
+            }
+        });
+
         res.json({
             success: true,
-            message: 'Passport renewed successfully.',
+            message: 'Passport renewed successfully. Sent to Printing Queue.',
             passport: newPassport,
             person: citizen
         });
@@ -616,6 +1011,17 @@ app.get('/api/admin/verify-passport-renewal/:ref', async (req, res) => {
 
         if (!citizen) {
             return res.status(404).json({ success: false, message: 'Passport or National ID not found. Cannot proceed.' });
+        }
+
+        const passport = citizen.passports[0];
+        if (!passport) {
+            return res.status(400).json({ success: false, message: 'Passport renewal is not available because no active passport record was found.' });
+        }
+
+        const now = new Date();
+        const threeYearsFromNow = new Date(now.getFullYear() + 3, now.getMonth(), now.getDate());
+        if (new Date(passport.expiry_date) > threeYearsFromNow) {
+            return res.status(400).json({ success: false, message: 'Passport renewal is only allowed when the passport has less than 3 years remaining before expiration.' });
         }
 
         res.json({ success: true, citizen });
@@ -717,6 +1123,78 @@ app.post('/api/user/requests', async (req, res) => {
     }
 
     try {
+        const applicantIdBigInt = BigInt(applicant_id);
+
+        // Validation Rules
+        const now = new Date();
+        const twoYearsFromNow = new Date(now.getFullYear() + 2, now.getMonth(), now.getDate());
+        const threeYearsFromNow = new Date(now.getFullYear() + 3, now.getMonth(), now.getDate());
+
+        if (service_type === 'ID_RENEWAL' || service_type === 'ID_REPLACEMENT') {
+            let idCard;
+            if (applicant_type === 'citizen') {
+                idCard = await prisma.citizenIdCard.findFirst({
+                    where: { citizen_id: applicantIdBigInt },
+                    orderBy: { issue_date: 'desc' }
+                });
+            } else if (applicant_type === 'resident') {
+                idCard = await prisma.residentIdCard.findFirst({
+                    where: { resident_id: applicantIdBigInt },
+                    orderBy: { issue_date: 'desc' }
+                });
+            }
+
+            if (!idCard) {
+                return res.status(400).json({ 
+                    success: false, 
+                    error: true,
+                    message: service_type === 'ID_RENEWAL' 
+                        ? 'National ID renewal is not available because no active National ID record was found.' 
+                        : 'National ID replacement is not available because no National ID record was found.'
+                });
+            }
+
+            if (service_type === 'ID_RENEWAL') {
+                if (new Date(idCard.expiry_date) > twoYearsFromNow) {
+                    return res.status(400).json({ 
+                        success: false, 
+                        error: true,
+                        message: 'National ID renewal is only allowed when the card has less than 2 years remaining before expiration.'
+                    });
+                }
+            }
+        }
+
+        if (service_type === 'PASSPORT_RENEWAL' || service_type === 'PASSPORT_REPLACEMENT') {
+            if (applicant_type !== 'citizen') {
+                return res.status(400).json({ success: false, error: true, message: 'Only citizens can apply for passport services.' });
+            }
+
+            const passport = await prisma.passport.findFirst({
+                where: { citizen_id: applicantIdBigInt },
+                orderBy: { issue_date: 'desc' }
+            });
+
+            if (!passport) {
+                return res.status(400).json({ 
+                    success: false, 
+                    error: true,
+                    message: service_type === 'PASSPORT_RENEWAL'
+                        ? 'Passport renewal is not available because no active passport record was found.'
+                        : 'Lost passport replacement is not available because no passport record was found.'
+                });
+            }
+
+            if (service_type === 'PASSPORT_RENEWAL') {
+                if (new Date(passport.expiry_date) > threeYearsFromNow) {
+                    return res.status(400).json({ 
+                        success: false, 
+                        error: true,
+                        message: 'Passport renewal is only allowed when the passport has less than 3 years remaining before expiration.'
+                    });
+                }
+            }
+        }
         const data = {
             applicant_type,
             service_type,
@@ -736,6 +1214,9 @@ app.post('/api/user/requests', async (req, res) => {
         if (personal_photo) {
             await prisma.$executeRawUnsafe(`UPDATE applications SET personal_photo = ? WHERE application_id = ?`, personal_photo, newRequest.application_id);
         }
+
+        notifyUser(applicant_id, applicant_type, 'Request Submitted', `Your request for ${service_type.replace(/_/g, ' ')} has been successfully submitted. Ref: REQ-${newRequest.application_id}`, 'request_submitted');
+        notifyStaff('New Request Submitted', `A new ${service_type.replace(/_/g, ' ')} request (REQ-${newRequest.application_id}) has been submitted and requires review.`, 'staff_request_submitted');
 
         res.json({ success: true, message: 'Request submitted successfully', request_id: newRequest.application_id.toString() });
     } catch (error) {
@@ -785,16 +1266,152 @@ app.get('/api/admin/requests', async (req, res) => {
 app.put('/api/admin/requests/:id', async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
-    
+
     try {
+        // First, fetch the application with citizen/resident data
+        const application = await prisma.application.findUnique({
+            where: { application_id: BigInt(id) },
+            include: { citizen: true, resident: true }
+        });
+
+        if (!application) {
+            return res.status(404).json({ success: false, message: 'Request not found' });
+        }
+
+        const isApproving = status === 'approved';
+        const serviceType = application.service_type;
+        const isReplacement = serviceType === 'PASSPORT_REPLACEMENT' || serviceType === 'ID_REPLACEMENT';
+        const isBirthReprint = serviceType === 'BIRTH_CERTIFICATE_REPRINT';
+
+        // For replacements being approved: auto-route directly to printing queue
+        if (isApproving && (isReplacement || isBirthReprint)) {
+            const applicantName = application.citizen?.full_name || application.resident?.full_name || 'Unknown';
+            const docNumber = application.citizen?.national_number || application.resident?.residence_number || id.toString();
+            const docType = isBirthReprint ? 'Birth Certificate' : (serviceType === 'PASSPORT_REPLACEMENT' ? 'Passport (Replacement)' : 'National ID (Replacement)');
+
+            // Move application straight to printing_queue
+            const updated = await prisma.application.update({
+                where: { application_id: BigInt(id) },
+                data: {
+                    status: 'printing_queue',
+                    approval_date: new Date()
+                }
+            });
+
+            // Create a PrintQueue record automatically
+            await prisma.printQueue.create({
+                data: {
+                    document_type: docType,
+                    document_number: docNumber,
+                    applicant_name: applicantName,
+                    request_number: id.toString(),
+                    status: 'pending'
+                }
+            });
+
+            // Record revenue for fee
+            await prisma.revenue.create({
+                data: {
+                    transaction_type: isBirthReprint ? 'Health' : (serviceType === 'PASSPORT_REPLACEMENT' ? 'Passport' : 'National ID'),
+                    service_name: isBirthReprint ? 'Birth Certificate Reprint' : (serviceType === 'PASSPORT_REPLACEMENT' ? 'Lost Passport Replacement' : 'Lost National ID Replacement'),
+                    amount: isBirthReprint ? 10.00 : 50.00,
+                    applicant_name: applicantName,
+                    id_number: docNumber,
+                    application_id: id.toString(),
+                    payment_method: 'cash',
+                    status: 'completed'
+                }
+            }).catch(() => null);
+
+            // Log the approval
+            await createLog({
+                event_type: 'REQUEST_APPROVED',
+                module_name: 'Requests',
+                description: `${docType} replacement request approved for ${applicantName} (${docNumber}). Auto-queued for printing.`,
+                ip_address: req.ip,
+                metadata: { application_id: id, service_type: serviceType, applicant: applicantName }
+            });
+
+            notifyUser(application.citizen_id || application.resident_id, application.applicant_type, 'Request Approved', `Your request (${docType}) has been approved.`, 'request_approved');
+            notifyUser(application.citizen_id || application.resident_id, application.applicant_type, 'Sent to Printing Queue', `Your request (${docType}) has been moved to the printing queue.`, 'request_printing');
+            notifyStaff('Request Ready for Printing', `${docType} request (${id}) for ${applicantName} is queued for printing.`, 'staff_printing_queue');
+
+            return res.json({
+                success: true,
+                request: JSON.parse(JSON.stringify(updated, (key, value) => typeof value === 'bigint' ? value.toString() : value)),
+                auto_queued: true,
+                message: 'Request approved and automatically sent to Printing Queue.'
+            });
+        }
+
+        const isBirthPdf = serviceType === 'BIRTH_CERTIFICATE_PDF';
+        
+        // For Birth Certificate PDF being approved: auto-route directly to completed
+        if (isApproving && isBirthPdf) {
+            const applicantNameOther = application.citizen?.full_name || application.resident?.full_name || 'Unknown';
+            const updated = await prisma.application.update({
+                where: { application_id: BigInt(id) },
+                data: {
+                    status: 'completed',
+                    approval_date: new Date()
+                }
+            });
+
+            await createLog({
+                event_type: 'REQUEST_APPROVED',
+                module_name: 'Requests',
+                description: `Birth Certificate PDF request approved and generated for ${applicantNameOther}.`,
+                ip_address: req.ip,
+                metadata: { application_id: id, service_type: serviceType }
+            });
+
+            notifyUser(application.citizen_id || application.resident_id, application.applicant_type, 'Request Approved', 'Your Birth Certificate PDF request has been approved.', 'request_approved');
+            notifyUser(application.citizen_id || application.resident_id, application.applicant_type, 'PDF Generated', 'Your official Birth Certificate PDF has been generated successfully.', 'pdf_generated');
+            notifyUser(application.citizen_id || application.resident_id, application.applicant_type, 'Request Completed', 'Your request is completed and ready for download.', 'request_completed');
+
+            notifyStaff('PDF Generated', `Birth Certificate PDF generated for ${applicantNameOther}.`, 'staff_pdf_generated');
+
+            return res.json({
+                success: true,
+                request: JSON.parse(JSON.stringify(updated, (key, value) => typeof value === 'bigint' ? value.toString() : value)),
+                auto_completed: true,
+                message: 'Request approved and PDF generated successfully.'
+            });
+        }
+
+        // For all other cases (renewals approval, rejections, etc.)
+        const applicantNameOther = application.citizen?.full_name || application.resident?.full_name || 'Unknown';
         const updated = await prisma.application.update({
             where: { application_id: BigInt(id) },
-            data: { 
+            data: {
                 status,
                 approval_date: status === 'approved' ? new Date() : null
             }
         });
-        
+
+        // Log the action
+        await createLog({
+            event_type: status === 'approved' ? 'REQUEST_APPROVED' : status === 'rejected' ? 'REQUEST_REJECTED' : 'REQUEST_UPDATED',
+            module_name: 'Requests',
+            description: `Request #${id} (${serviceType}) ${status} for ${applicantNameOther}.`,
+            ip_address: req.ip,
+            metadata: { application_id: id, service_type: serviceType, status }
+        });
+
+        if (status === 'approved') {
+            notifyUser(application.citizen_id || application.resident_id, application.applicant_type, 'Request Approved', `Your request (${serviceType}) has been approved.`, 'request_approved');
+            notifyStaff('Request Approved', `Request #${id} for ${applicantNameOther} has been approved.`, 'staff_request_approved');
+        } else if (status === 'rejected') {
+            notifyUser(application.citizen_id || application.resident_id, application.applicant_type, 'Request Rejected', `Your request (${serviceType}) has been rejected.`, 'request_rejected');
+        } else if (status === 'printing_queue') {
+            notifyUser(application.citizen_id || application.resident_id, application.applicant_type, 'Sent to Printing', `Your request (${serviceType}) is now being printed.`, 'request_printing');
+            notifyStaff('Sent to Printing', `Request #${id} is sent to the printing queue.`, 'staff_printing_queue');
+        } else if (status === 'under_review') {
+            notifyUser(application.citizen_id || application.resident_id, application.applicant_type, 'Under Review', `Your request (${serviceType}) is currently under review.`, 'request_review');
+        } else if (status === 'completed') {
+            notifyUser(application.citizen_id || application.resident_id, application.applicant_type, 'Request Completed', `Your request (${serviceType}) is completed.`, 'request_completed');
+        }
+
         res.json({ success: true, request: JSON.parse(JSON.stringify(updated, (key, value) => typeof value === 'bigint' ? value.toString() : value)) });
     } catch (error) {
         console.error('Error updating request:', error);
@@ -849,7 +1466,751 @@ app.get('/api/user/criminal-status/:id_number', async (req, res) => {
     }
 });
 
-app.listen(PORT, () => {
+// In-memory print log (persists during server session)
+const printLogs = [];
 
+// Admin endpoint: Log a print action
+app.post('/api/admin/print-log', (req, res) => {
+    const { admin_name, document_type, document_number, timestamp } = req.body;
+    if (!document_type || !document_number) {
+        return res.status(400).json({ success: false, message: 'Missing document info' });
+    }
+    const logEntry = {
+        id: printLogs.length + 1,
+        admin_name: admin_name || 'Unknown Admin',
+        document_type,
+        document_number,
+        timestamp: timestamp || new Date().toISOString()
+    };
+    printLogs.push(logEntry);
+    console.log(`[PRINT LOG] ${logEntry.admin_name} printed ${logEntry.document_type} #${logEntry.document_number} at ${logEntry.timestamp}`);
+    res.json({ success: true, log: logEntry });
+});
+
+// Admin endpoint: Get all print logs
+app.get('/api/admin/print-logs', (req, res) => {
+    res.json({ success: true, logs: [...printLogs].reverse() });
+});
+
+// Admin endpoint: Get Print Queue (Pending)
+app.get('/api/admin/print-queue', async (req, res) => {
+    try {
+        const queue = await prisma.printQueue.findMany({
+            where: { status: 'pending' },
+            orderBy: { request_date: 'asc' }
+        });
+        res.json({ success: true, queue: JSON.parse(JSON.stringify(queue, (key, value) => typeof value === 'bigint' ? value.toString() : value)) });
+    } catch (error) {
+        console.error('Error fetching print queue:', error);
+        res.status(500).json({ error: 'Failed to fetch print queue', details: error.message });
+    }
+});
+
+// Admin endpoint: Get Print Queue (All)
+app.get('/api/admin/print-queue-all', async (req, res) => {
+    try {
+        const queue = await prisma.printQueue.findMany({
+            orderBy: { request_date: 'desc' }
+        });
+        res.json({ success: true, queue: JSON.parse(JSON.stringify(queue, (key, value) => typeof value === 'bigint' ? value.toString() : value)) });
+    } catch (error) {
+        console.error('Error fetching print queue all:', error);
+        res.status(500).json({ error: 'Failed to fetch all print queue', details: error.message });
+    }
+});
+
+// Admin endpoint: Get Print History (Printed)
+app.get('/api/admin/print-history', async (req, res) => {
+    try {
+        const history = await prisma.printQueue.findMany({
+            where: { status: 'printed' },
+            orderBy: { print_date: 'desc' }
+        });
+        res.json({ success: true, history: JSON.parse(JSON.stringify(history, (key, value) => typeof value === 'bigint' ? value.toString() : value)) });
+    } catch (error) {
+        console.error('Error fetching print history:', error);
+        res.status(500).json({ error: 'Failed to fetch print history', details: error.message });
+    }
+});
+
+// Admin endpoint: Mark as Printed
+app.put('/api/admin/mark-printed/:id', async (req, res) => {
+    const { id } = req.params;
+    const { printedBy } = req.body;
+    try {
+        const printRequest = await prisma.printQueue.findUnique({
+            where: { print_id: BigInt(id) }
+        });
+
+        if (!printRequest) {
+            return res.status(404).json({ success: false, message: 'Print request not found' });
+        }
+
+        const updated = await prisma.printQueue.update({
+            where: { print_id: BigInt(id) },
+            data: {
+                status: 'printed',
+                print_date: new Date(),
+                print_time: new Date().toLocaleTimeString(),
+                printed_by: printedBy || 'System'
+            }
+        });
+
+        // Also update the original application to completed if possible
+        if (printRequest.request_number) {
+            // Check if it's an application ID (numeric)
+            if (!isNaN(printRequest.request_number)) {
+                const appId = BigInt(printRequest.request_number);
+                const app = await prisma.application.findUnique({ where: { application_id: appId } }).catch(() => null);
+                if (app && app.status === 'printing_queue') {
+                    await prisma.application.update({
+                        where: { application_id: appId },
+                        data: { status: 'completed' }
+                    });
+                    notifyUser(app.citizen_id || app.resident_id, app.applicant_type, 'Request Completed', `Your request (${app.service_type}) is completed and printed.`, 'request_completed');
+                }
+            }
+        }
+
+        // Log the print action
+        await createLog({
+            event_type: 'DOCUMENT_PRINTED',
+            module_name: 'Printing',
+            description: `${printRequest.document_type} printed for ${printRequest.applicant_name} (${printRequest.document_number}) by ${printedBy || 'System'}.`,
+            username: printedBy || 'System',
+            ip_address: req.ip,
+            metadata: { print_id: id, document_type: printRequest.document_type, document_number: printRequest.document_number }
+        });
+
+        notifyStaff('Document Printed', `${printRequest.document_type} for ${printRequest.applicant_name} has been printed successfully.`, 'staff_printed');
+
+        res.json({ success: true, message: 'Document marked as printed', printed: JSON.parse(JSON.stringify(updated, (key, value) => typeof value === 'bigint' ? value.toString() : value)) });
+    } catch (error) {
+        console.error('Error marking printed:', error);
+        res.status(500).json({ error: 'Failed to mark as printed', details: error.message });
+    }
+});
+
+// User Management Page Endpoints
+app.get('/api/admin/users', async (req, res) => {
+    try {
+        const users = await prisma.user.findMany({
+            include: { citizen: true, resident: true, employee: true }
+        });
+        const flatUsers = users.map(user => {
+            const { password_hash, citizen, resident, employee, ...rest } = user;
+            return {
+                ...rest,
+                fullName: citizen?.full_name || resident?.full_name || employee?.full_name || user.username
+            };
+        });
+        res.json({ success: true, users: JSON.parse(JSON.stringify(flatUsers, (key, value) => typeof value === 'bigint' ? value.toString() : value)) });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch users' });
+    }
+});
+
+app.put('/api/admin/users/:id', async (req, res) => {
+    const { id } = req.params;
+    const { account_type, is_active, password } = req.body;
+    try {
+        const dataToUpdate = {};
+        if (account_type) dataToUpdate.account_type = account_type;
+        if (is_active !== undefined) dataToUpdate.is_active = is_active;
+        if (password) dataToUpdate.password_hash = password;
+
+        const updated = await prisma.user.update({
+            where: { user_id: BigInt(id) },
+            data: dataToUpdate
+        });
+
+        res.json({ success: true, message: 'User updated successfully' });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to update user' });
+    }
+});
+
+// =====================================
+// LOGGING HELPER
+// =====================================
+const createLog = async ({ event_type, module_name, description, user_id, username, account_type, ip_address, metadata }) => {
+    try {
+        await prisma.systemLog.create({
+            data: {
+                event_type: event_type || 'SYSTEM',
+                module_name: module_name || 'System',
+                description: description || '',
+                user_id: user_id ? String(user_id) : null,
+                username: username || null,
+                account_type: account_type || null,
+                ip_address: ip_address || null,
+                metadata: metadata ? JSON.stringify(metadata) : null,
+            }
+        });
+    } catch (e) {
+        // Non-critical - just log to console if DB logging fails
+        console.error('[LOG ERROR]', e.message);
+    }
+};
+
+// =====================================
+// SYSTEM LOGS ENDPOINTS
+// =====================================
+
+// Get all logs with filters & pagination
+app.get('/api/admin/logs', async (req, res) => {
+    try {
+        const { page = 1, limit = 50, event_type, module_name, username, account_type, from, to, search } = req.query;
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+
+        const where = {};
+        if (event_type) where.event_type = event_type;
+        if (module_name) where.module_name = module_name;
+        if (username) where.username = { contains: username };
+        if (account_type) where.account_type = account_type;
+        if (from || to) {
+            where.created_at = {};
+            if (from) where.created_at.gte = new Date(from);
+            if (to) where.created_at.lte = new Date(to + 'T23:59:59');
+        }
+        if (search) {
+            where.OR = [
+                { description: { contains: search } },
+                { username: { contains: search } },
+                { event_type: { contains: search } },
+                { module_name: { contains: search } },
+            ];
+        }
+
+        const [logs, total] = await Promise.all([
+            prisma.systemLog.findMany({ where, skip, take: parseInt(limit), orderBy: { created_at: 'desc' } }),
+            prisma.systemLog.count({ where })
+        ]);
+
+        const serialized = JSON.parse(JSON.stringify(logs, (k, v) => typeof v === 'bigint' ? v.toString() : v));
+        res.json({ success: true, logs: serialized, total, pages: Math.ceil(total / parseInt(limit)) });
+    } catch (error) {
+        console.error('Error fetching logs:', error);
+        res.status(500).json({ error: 'Failed to fetch logs', details: error.message });
+    }
+});
+
+// Get distinct event types and modules for filter dropdowns
+app.get('/api/admin/logs/meta', async (req, res) => {
+    try {
+        const [eventTypes, modules, accountTypes] = await Promise.all([
+            prisma.systemLog.groupBy({ by: ['event_type'], _count: { log_id: true } }).catch(() => []),
+            prisma.systemLog.groupBy({ by: ['module_name'], _count: { log_id: true } }).catch(() => []),
+            prisma.systemLog.groupBy({ by: ['account_type'], _count: { log_id: true } }).catch(() => []),
+        ]);
+        res.json({
+            success: true,
+            eventTypes: eventTypes.map(e => e.event_type).filter(Boolean),
+            modules: modules.map(m => m.module_name).filter(Boolean),
+            accountTypes: accountTypes.map(a => a.account_type).filter(Boolean),
+        });
+    } catch (error) {
+        res.json({ success: true, eventTypes: [], modules: [], accountTypes: [] });
+    }
+});
+
+// =====================================
+// REVENUE ENDPOINTS
+// =====================================
+
+// Get revenue with filters
+app.get('/api/admin/revenue', async (req, res) => {
+    try {
+        const { from, to, transaction_type, search, page = 1, limit = 50 } = req.query;
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+        const where = { status: 'completed' };
+
+        if (transaction_type) where.transaction_type = transaction_type;
+        if (from || to) {
+            where.created_at = {};
+            if (from) where.created_at.gte = new Date(from);
+            if (to) where.created_at.lte = new Date(to + 'T23:59:59');
+        }
+        if (search) {
+            where.OR = [
+                { applicant_name: { contains: search } },
+                { id_number: { contains: search } },
+                { service_name: { contains: search } },
+            ];
+        }
+
+        const [records, total] = await Promise.all([
+            prisma.revenue.findMany({ where, skip, take: parseInt(limit), orderBy: { created_at: 'desc' } }).catch(() => []),
+            prisma.revenue.count({ where }).catch(() => 0)
+        ]);
+
+        const serialized = JSON.parse(JSON.stringify(records, (k, v) => typeof v === 'bigint' ? v.toString() : v));
+        res.json({ success: true, records: serialized, total, pages: Math.ceil(total / parseInt(limit)) });
+    } catch (error) {
+        res.json({ success: true, records: [], total: 0, pages: 0 });
+    }
+});
+
+// Revenue statistics summary
+app.get('/api/admin/revenue/stats', async (req, res) => {
+    try {
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const startOfYear = new Date(now.getFullYear(), 0, 1);
+
+        const safeAgg = async (where) => {
+            try {
+                const r = await prisma.revenue.aggregate({ where, _sum: { amount: true } });
+                return r._sum.amount || 0;
+            } catch { return 0; }
+        };
+        const safeGroup = async () => {
+            try {
+                return await prisma.revenue.groupBy({ by: ['transaction_type'], where: { status: 'completed' }, _sum: { amount: true }, _count: { revenue_id: true } });
+            } catch { return []; }
+        };
+
+        const [grandTotal, monthly, yearly, idTotal, passportTotal, renewalTotal, replacementTotal, byType] = await Promise.all([
+            safeAgg({ status: 'completed' }),
+            safeAgg({ status: 'completed', created_at: { gte: startOfMonth } }),
+            safeAgg({ status: 'completed', created_at: { gte: startOfYear } }),
+            safeAgg({ status: 'completed', transaction_type: { contains: 'National ID' } }),
+            safeAgg({ status: 'completed', transaction_type: { contains: 'Passport' } }),
+            safeAgg({ status: 'completed', service_name: { contains: 'Renewal' } }),
+            safeAgg({ status: 'completed', service_name: { contains: 'Replacement' } }),
+            safeGroup(),
+        ]);
+
+        res.json({
+            success: true,
+            stats: {
+                grand_total: grandTotal,
+                monthly,
+                yearly,
+                national_id_total: idTotal,
+                passport_total: passportTotal,
+                renewal_total: renewalTotal,
+                replacement_total: replacementTotal,
+                by_type: byType.map(b => ({ type: b.transaction_type, total: b._sum.amount || 0, count: b._count.revenue_id }))
+            }
+        });
+    } catch (error) {
+        res.json({ success: true, stats: { grand_total: 0, monthly: 0, yearly: 0, national_id_total: 0, passport_total: 0, renewal_total: 0, replacement_total: 0, by_type: [] } });
+    }
+});
+
+// =====================================
+// DYNAMIC PENDING REQUESTS COUNT
+// =====================================
+app.get('/api/admin/requests/pending-count', async (req, res) => {
+    try {
+        const count = await prisma.application.count({ where: { status: 'pending' } });
+        res.json({ success: true, count });
+    } catch (error) {
+        res.json({ success: true, count: 0 });
+    }
+});
+
+// =====================================
+// REPORTS ENDPOINTS
+// =====================================
+
+// --- National ID Reports ---
+app.get('/api/admin/reports/national-id', async (req, res) => {
+    try {
+        const { from, to, status, search, page = 1, limit = 20, sortBy = 'request_date', sortOrder = 'desc' } = req.query;
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+        const where = {
+            service_type: { in: ['NATIONAL_ID', 'RENEWAL', 'ID_REPLACEMENT'] }
+        };
+        if (status) where.status = status;
+        if (from || to) {
+            where.request_date = {};
+            if (from) where.request_date.gte = new Date(from);
+            if (to) where.request_date.lte = new Date(to + 'T23:59:59');
+        }
+        if (search) {
+            where.OR = [
+                { citizen: { full_name: { contains: search } } },
+                { citizen: { national_number: { contains: search } } },
+                { resident: { full_name: { contains: search } } },
+            ];
+            const searchId = parseInt(search);
+            if (!isNaN(searchId)) {
+                where.OR.push({ application_id: searchId });
+            }
+        }
+
+        const orderBy = { [sortBy]: sortOrder };
+        const [records, total, newCount, renewalCount, replacementCount, pendingCount, approvedCount, rejectedCount, completedCount] = await Promise.all([
+            prisma.application.findMany({ where, skip, take: parseInt(limit), orderBy, include: { citizen: true, resident: true } }),
+            prisma.application.count({ where }),
+            prisma.application.count({ where: { ...where, service_type: 'NATIONAL_ID' } }),
+            prisma.application.count({ where: { ...where, service_type: 'RENEWAL' } }),
+            prisma.application.count({ where: { ...where, service_type: 'ID_REPLACEMENT' } }),
+            prisma.application.count({ where: { ...where, status: 'pending' } }),
+            prisma.application.count({ where: { ...where, status: 'approved' } }),
+            prisma.application.count({ where: { ...where, status: 'rejected' } }),
+            prisma.application.count({ where: { ...where, status: 'completed' } }),
+        ]);
+
+        const serialized = JSON.parse(JSON.stringify(records, (k, v) => typeof v === 'bigint' ? v.toString() : v));
+        res.json({ success: true, records: serialized, total, pages: Math.ceil(total / parseInt(limit)), summary: { newCount, renewalCount, replacementCount, pendingCount, approvedCount, rejectedCount, completedCount } });
+    } catch (error) {
+        console.error('NID report error:', error);
+        res.status(500).json({ error: 'Failed to fetch National ID report', details: error.message });
+    }
+});
+
+// --- Passport Reports ---
+app.get('/api/admin/reports/passport', async (req, res) => {
+    try {
+        const { from, to, status, search, page = 1, limit = 20, sortBy = 'request_date', sortOrder = 'desc' } = req.query;
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+        const where = {
+            service_type: { in: ['PASSPORT', 'PASSPORT_RENEWAL', 'PASSPORT_REPLACEMENT'] }
+        };
+        if (status) where.status = status;
+        if (from || to) {
+            where.request_date = {};
+            if (from) where.request_date.gte = new Date(from);
+            if (to) where.request_date.lte = new Date(to + 'T23:59:59');
+        }
+        if (search) {
+            where.OR = [
+                { citizen: { full_name: { contains: search } } },
+                { citizen: { national_number: { contains: search } } },
+            ];
+            const searchId = parseInt(search);
+            if (!isNaN(searchId)) {
+                where.OR.push({ application_id: searchId });
+            }
+        }
+
+        const orderBy = { [sortBy]: sortOrder };
+        const [records, total, newCount, renewalCount, replacementCount, pendingCount, approvedCount, rejectedCount, completedCount] = await Promise.all([
+            prisma.application.findMany({ where, skip, take: parseInt(limit), orderBy, include: { citizen: true, resident: true } }),
+            prisma.application.count({ where }),
+            prisma.application.count({ where: { ...where, service_type: 'PASSPORT' } }),
+            prisma.application.count({ where: { ...where, service_type: 'PASSPORT_RENEWAL' } }),
+            prisma.application.count({ where: { ...where, service_type: 'PASSPORT_REPLACEMENT' } }),
+            prisma.application.count({ where: { ...where, status: 'pending' } }),
+            prisma.application.count({ where: { ...where, status: 'approved' } }),
+            prisma.application.count({ where: { ...where, status: 'rejected' } }),
+            prisma.application.count({ where: { ...where, status: 'completed' } }),
+        ]);
+
+        const serialized = JSON.parse(JSON.stringify(records, (k, v) => typeof v === 'bigint' ? v.toString() : v));
+        res.json({ success: true, records: serialized, total, pages: Math.ceil(total / parseInt(limit)), summary: { newCount, renewalCount, replacementCount, pendingCount, approvedCount, rejectedCount, completedCount } });
+    } catch (error) {
+        console.error('Passport report error:', error);
+        res.status(500).json({ error: 'Failed to fetch Passport report', details: error.message });
+    }
+});
+
+// --- Printing Reports ---
+app.get('/api/admin/reports/printing', async (req, res) => {
+    try {
+        const { from, to, status, search, page = 1, limit = 20, sortBy = 'request_date', sortOrder = 'desc' } = req.query;
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+        const where = {};
+        if (status) where.status = status;
+        if (from || to) {
+            where.request_date = {};
+            if (from) where.request_date.gte = new Date(from);
+            if (to) where.request_date.lte = new Date(to + 'T23:59:59');
+        }
+        if (search) {
+            where.OR = [
+                { applicant_name: { contains: search } },
+                { document_number: { contains: search } },
+                { document_type: { contains: search } },
+            ];
+        }
+
+        const orderBy = sortBy === 'request_date' ? { request_date: sortOrder } : { print_date: sortOrder };
+        const [records, total, pendingCount, printedCount, idCount, passportCount] = await Promise.all([
+            prisma.printQueue.findMany({ where, skip, take: parseInt(limit), orderBy }),
+            prisma.printQueue.count({ where }),
+            prisma.printQueue.count({ where: { ...where, status: 'pending' } }),
+            prisma.printQueue.count({ where: { ...where, status: 'printed' } }),
+            prisma.printQueue.count({ where: { ...where, document_type: { contains: 'ID' } } }),
+            prisma.printQueue.count({ where: { ...where, document_type: { contains: 'Passport' } } }),
+        ]);
+
+        const serialized = JSON.parse(JSON.stringify(records, (k, v) => typeof v === 'bigint' ? v.toString() : v));
+        res.json({ success: true, records: serialized, total, pages: Math.ceil(total / parseInt(limit)), summary: { pendingCount, printedCount, idCount, passportCount } });
+    } catch (error) {
+        console.error('Printing report error:', error);
+        res.status(500).json({ error: 'Failed to fetch Printing report', details: error.message });
+    }
+});
+
+// --- User Reports ---
+app.get('/api/admin/reports/users', async (req, res) => {
+    try {
+        const { search, account_type, is_active, page = 1, limit = 20, sortBy = 'created_at', sortOrder = 'desc' } = req.query;
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+        const where = {};
+        if (account_type) where.account_type = account_type;
+        if (is_active !== undefined && is_active !== '') where.is_active = is_active === 'true';
+        if (search) {
+            where.OR = [
+                { username: { contains: search } },
+                { email: { contains: search } },
+            ];
+        }
+
+        const orderBy = { [sortBy]: sortOrder };
+        const [users, total, activeCount, disabledCount, byType] = await Promise.all([
+            prisma.user.findMany({ where, skip, take: parseInt(limit), orderBy, include: { citizen: { select: { full_name: true } }, resident: { select: { full_name: true } }, employee: { select: { full_name: true } } } }),
+            prisma.user.count({ where }),
+            prisma.user.count({ where: { ...where, is_active: true } }),
+            prisma.user.count({ where: { ...where, is_active: false } }),
+            prisma.user.groupBy({ by: ['account_type'], _count: { user_id: true } }),
+        ]);
+
+        const flatUsers = users.map(u => {
+            const { password_hash, citizen, resident, employee, ...rest } = u;
+            return { ...rest, full_name: citizen?.full_name || resident?.full_name || employee?.full_name || u.username };
+        });
+
+        const serialized = JSON.parse(JSON.stringify(flatUsers, (k, v) => typeof v === 'bigint' ? v.toString() : v));
+        const byTypeSer = JSON.parse(JSON.stringify(byType, (k, v) => typeof v === 'bigint' ? v.toString() : v));
+        res.json({ success: true, records: serialized, total, pages: Math.ceil(total / parseInt(limit)), summary: { activeCount, disabledCount, byType: byTypeSer } });
+    } catch (error) {
+        console.error('User report error:', error);
+        res.status(500).json({ error: 'Failed to fetch User report', details: error.message });
+    }
+});
+
+// --- Activity Log Reports ---
+app.get('/api/admin/reports/activity-logs', async (req, res) => {
+    try {
+        const { from, to, event_type, module_name, username, account_type, search, page = 1, limit = 20, sortOrder = 'desc' } = req.query;
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+        const where = {};
+        if (event_type) where.event_type = event_type;
+        if (module_name) where.module_name = module_name;
+        if (username) where.username = { contains: username };
+        if (account_type) where.account_type = account_type;
+        if (from || to) {
+            where.created_at = {};
+            if (from) where.created_at.gte = new Date(from);
+            if (to) where.created_at.lte = new Date(to + 'T23:59:59');
+        }
+        if (search) {
+            where.OR = [
+                { description: { contains: search } },
+                { username: { contains: search } },
+                { event_type: { contains: search } },
+                { module_name: { contains: search } },
+            ];
+        }
+
+        const [logs, total, eventMeta] = await Promise.all([
+            prisma.systemLog.findMany({ where, skip, take: parseInt(limit), orderBy: { created_at: sortOrder } }).catch(() => []),
+            prisma.systemLog.count({ where }).catch(() => 0),
+            prisma.systemLog.groupBy({ by: ['event_type'], _count: { log_id: true } }).catch(() => []),
+        ]);
+
+        const serialized = JSON.parse(JSON.stringify(logs, (k, v) => typeof v === 'bigint' ? v.toString() : v));
+        const metaSer = JSON.parse(JSON.stringify(eventMeta, (k, v) => typeof v === 'bigint' ? v.toString() : v));
+        res.json({ success: true, records: serialized, total, pages: Math.ceil(total / parseInt(limit)), eventSummary: metaSer });
+    } catch (error) {
+        res.json({ success: true, records: [], total: 0, pages: 0, eventSummary: [] });
+    }
+});
+
+// --- Revenue Reports (extended) ---
+app.get('/api/admin/reports/revenue', async (req, res) => {
+    try {
+        const { from, to, transaction_type, search, page = 1, limit = 20, sortOrder = 'desc' } = req.query;
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+        const where = { status: 'completed' };
+        if (transaction_type) where.transaction_type = transaction_type;
+        if (from || to) {
+            where.created_at = {};
+            if (from) where.created_at.gte = new Date(from);
+            if (to) where.created_at.lte = new Date(to + 'T23:59:59');
+        }
+        if (search) where.OR = [{ applicant_name: { contains: search } }, { service_name: { contains: search } }, { id_number: { contains: search } }];
+
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const startOfYear = new Date(now.getFullYear(), 0, 1);
+
+        const safeAgg = async (w) => { try { const r = await prisma.revenue.aggregate({ where: w, _sum: { amount: true } }); return parseFloat(r._sum.amount || 0); } catch { return 0; } };
+
+        const [records, total, grandTotal, monthly, yearly, idRev, passportRev, renewalRev, replacementRev] = await Promise.all([
+            prisma.revenue.findMany({ where, skip, take: parseInt(limit), orderBy: { created_at: sortOrder } }).catch(() => []),
+            prisma.revenue.count({ where }).catch(() => 0),
+            safeAgg({ status: 'completed' }),
+            safeAgg({ status: 'completed', created_at: { gte: startOfMonth } }),
+            safeAgg({ status: 'completed', created_at: { gte: startOfYear } }),
+            safeAgg({ status: 'completed', transaction_type: { contains: 'National ID' } }),
+            safeAgg({ status: 'completed', transaction_type: { contains: 'Passport' } }),
+            safeAgg({ status: 'completed', service_name: { contains: 'Renewal' } }),
+            safeAgg({ status: 'completed', service_name: { contains: 'Replacement' } }),
+        ]);
+
+        const serialized = JSON.parse(JSON.stringify(records, (k, v) => typeof v === 'bigint' ? v.toString() : v));
+        res.json({
+            success: true, records: serialized, total, pages: Math.ceil(total / parseInt(limit)),
+            summary: { grandTotal, monthly, yearly, idRev, passportRev, renewalRev, replacementRev }
+        });
+    } catch (error) {
+        res.json({ success: true, records: [], total: 0, pages: 0, summary: { grandTotal: 0, monthly: 0, yearly: 0, idRev: 0, passportRev: 0, renewalRev: 0, replacementRev: 0 } });
+    }
+});
+
+// =====================================
+// NOTIFICATIONS API
+// =====================================
+
+app.get('/api/notifications', async (req, res) => {
+    try {
+        const { user_id, account_type } = req.query;
+        if (!user_id || !account_type) return res.status(400).json({ success: false, error: 'User ID and Account Type required' });
+        
+        let targetUserId = user_id;
+        // Optional: If you need to find User ID by citizen_id/resident_id, do it here. 
+        // For simplicity, assuming user_id parameter passed represents the actual user.user_id or we lookup.
+        const user = await prisma.user.findFirst({
+            where: {
+                OR: [
+                    { user_id: !isNaN(parseInt(user_id)) ? BigInt(user_id) : undefined },
+                    { citizen_id: !isNaN(parseInt(user_id)) && account_type === 'citizen' ? BigInt(user_id) : undefined },
+                    { resident_id: !isNaN(parseInt(user_id)) && account_type === 'resident' ? BigInt(user_id) : undefined },
+                    { employee_id: !isNaN(parseInt(user_id)) && account_type === 'staff' ? BigInt(user_id) : undefined }
+                ]
+            }
+        });
+
+        if (!user) return res.json({ success: true, notifications: [] });
+
+        const notifications = await prisma.notification.findMany({
+            where: { user_id: user.user_id },
+            orderBy: { created_at: 'desc' }
+        });
+        
+        const formatted = JSON.parse(JSON.stringify(notifications, (key, value) =>
+            typeof value === 'bigint' ? value.toString() : value
+        ));
+        
+        res.json({ success: true, notifications: formatted });
+    } catch (err) {
+        console.error('Fetch notifications error:', err);
+        res.status(500).json({ success: false, error: 'Failed to fetch notifications' });
+    }
+});
+
+app.put('/api/notifications/:id/read', async (req, res) => {
+    try {
+        await prisma.notification.update({
+            where: { notification_id: BigInt(req.params.id) },
+            data: { is_read: true }
+        });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ success: false, error: 'Failed to mark read' });
+    }
+});
+
+app.put('/api/notifications/read-all', async (req, res) => {
+    try {
+        const { user_id, account_type } = req.body;
+        if (!user_id) return res.status(400).json({ success: false, error: 'User ID required' });
+        
+        const user = await prisma.user.findFirst({
+            where: {
+                OR: [
+                    { user_id: !isNaN(parseInt(user_id)) ? BigInt(user_id) : undefined },
+                    { citizen_id: !isNaN(parseInt(user_id)) && account_type === 'citizen' ? BigInt(user_id) : undefined },
+                    { resident_id: !isNaN(parseInt(user_id)) && account_type === 'resident' ? BigInt(user_id) : undefined }
+                ]
+            }
+        });
+
+        if (!user) return res.json({ success: true });
+
+        await prisma.notification.updateMany({
+            where: { user_id: user.user_id, is_read: false },
+            data: { is_read: true }
+        });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ success: false, error: 'Failed to mark all read' });
+    }
+});
+
+app.delete('/api/notifications/:id', async (req, res) => {
+    try {
+        await prisma.notification.delete({
+            where: { notification_id: BigInt(req.params.id) }
+        });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ success: false, error: 'Failed to delete notification' });
+    }
+});
+
+// Helper function to create logic-based notifications
+const notifyUser = async (applicant_id, accountType, title, message, type) => {
+    try {
+        const user = await prisma.user.findFirst({
+            where: {
+                OR: [
+                    { user_id: !isNaN(parseInt(applicant_id)) ? BigInt(applicant_id) : undefined },
+                    { citizen_id: !isNaN(parseInt(applicant_id)) && accountType === 'citizen' ? BigInt(applicant_id) : undefined },
+                    { resident_id: !isNaN(parseInt(applicant_id)) && accountType === 'resident' ? BigInt(applicant_id) : undefined }
+                ]
+            }
+        });
+        if (user) {
+            await prisma.notification.create({
+                data: {
+                    user_id: user.user_id,
+                    title,
+                    message,
+                    notification_type: type,
+                    is_read: false
+                }
+            });
+        }
+    } catch (error) {
+        console.error("Error creating user notification: ", error);
+    }
+};
+
+const notifyStaff = async (title, message, type) => {
+    try {
+        const staffUsers = await prisma.user.findMany({
+            where: {
+                NOT: {
+                    account_type: { in: ['citizen', 'resident'] }
+                }
+            }
+        });
+        
+        const notificationsData = staffUsers.map(staff => ({
+            user_id: staff.user_id,
+            title,
+            message,
+            notification_type: type,
+            is_read: false
+        }));
+
+        if (notificationsData.length > 0) {
+            await prisma.notification.createMany({
+                data: notificationsData
+            });
+        }
+    } catch (error) {
+        console.error("Error creating staff notification: ", error);
+    }
+};
+
+app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });

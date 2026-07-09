@@ -35,6 +35,7 @@ const INITIAL_STATS = {
 };
 const App = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [user, setUser] = useState(null);
   const [lang, setLang] = useState('so');
   const [activeTab, setActiveTab] = useState('dashboard');
   const [citizens, setCitizens] = useState(INITIAL_CITIZENS);
@@ -87,8 +88,28 @@ const App = () => {
       alert('Error saving criminal record to database.');
     }
   };
+
+  const handleLogin = (userData) => {
+    setUser(userData);
+    setIsLoggedIn(true);
+    if (userData.accountType === 'Police_Officer') {
+      setActiveTab('dashboard');
+    }
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+    setIsLoggedIn(false);
+    setActiveTab('dashboard');
+  };
+
+  const canAccessTab = (tab) => {
+    if (!user) return false;
+    if (user.accountType === 'Police_Officer') return true;
+    return false;
+  };
   if (!isLoggedIn) {
-    return <Login onLogin={() => setIsLoggedIn(true)} lang={lang} onLangChange={setLang} />;
+    return <Login onLogin={handleLogin} lang={lang} onLangChange={setLang} />;
   }
   return <div className={`flex h-screen bg-[#f8fafc] overflow-hidden font-medium`}>
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} lang={lang} />
@@ -140,7 +161,7 @@ const App = () => {
                   <div className="absolute inset-0 bg-blue-900/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                   <img src={spfLogo} alt="Officer Avatar" className="w-full h-full object-contain relative z-10" />
                </div>
-               <button onClick={() => setIsLoggedIn(false)} className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-50 border border-slate-100 text-slate-300 hover:text-white hover:bg-red-700 hover:border-red-700 transition-all group shadow-sm active:scale-95" title="Logout">
+               <button onClick={handleLogout} className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-50 border border-slate-100 text-slate-300 hover:text-white hover:bg-red-700 hover:border-red-700 transition-all group shadow-sm active:scale-95" title="Logout">
                  <span className="text-lg transition-transform group-hover:rotate-12">⏻</span>
                </button>
             </div>
@@ -152,19 +173,37 @@ const App = () => {
           <div className="absolute top-0 left-0 w-full h-full official-seal-bg pointer-events-none"></div>
           
           <div className="relative z-10">
-            {activeTab === 'dashboard' && <DashboardOverview stats={stats} lang={lang} />}
-            {activeTab === 'search' && <CitizenSearch citizens={citizens} onAddRecord={handleAddRecord} lang={lang} />}
-            {activeTab === 'add-crime' && <CriminalRecordForm lang={lang} />}
-            {activeTab === 'add-resident-crime' && <ResidentCriminalRecordForm lang={lang} />}
-
-            {!['dashboard', 'search', 'add-crime', 'add-resident-crime'].includes(activeTab) && <div className="flex flex-col items-center justify-center h-[50vh] text-center opacity-40">
-
-                <div className="w-40 h-40 bg-white border border-slate-200 rounded-3xl flex items-center justify-center text-6xl mb-10 shadow-inner p-8">
-                  <img src={spfLogo} alt="Restricted" className="w-full h-full object-contain grayscale" />
+            {!canAccessTab(activeTab) ? (
+              <div className="flex flex-col items-center justify-center h-[50vh] text-center">
+                <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mb-6">
+                  <i className="fa-solid fa-lock text-red-500 text-3xl"></i>
                 </div>
-                <h3 className="text-xl font-black text-slate-400 uppercase tracking-[0.5em]">Classified Access</h3>
-                <p className="text-xs text-slate-400 mt-4 font-bold uppercase tracking-widest">Biometric Authorization Required</p>
-              </div>}
+                <h3 className="text-xl font-black text-slate-900 uppercase tracking-[0.5em] mb-2">Access Denied</h3>
+                <p className="text-sm text-slate-600 mb-6 font-bold uppercase tracking-widest">You do not have permission to access this section</p>
+                <button
+                  onClick={() => setActiveTab('dashboard')}
+                  className="bg-[#0b1528] text-white px-6 py-3 font-black uppercase tracking-wider text-xs hover:bg-[#162a4d] transition-colors"
+                >
+                  Return to Dashboard
+                </button>
+              </div>
+            ) : (
+              <>
+                {activeTab === 'dashboard' && <DashboardOverview stats={stats} lang={lang} />}
+                {activeTab === 'search' && <CitizenSearch citizens={citizens} onAddRecord={handleAddRecord} lang={lang} />}
+                {activeTab === 'add-crime' && <CriminalRecordForm lang={lang} />}
+                {activeTab === 'add-resident-crime' && <ResidentCriminalRecordForm lang={lang} />}
+
+                {!['dashboard', 'search', 'add-crime', 'add-resident-crime'].includes(activeTab) && <div className="flex flex-col items-center justify-center h-[50vh] text-center opacity-40">
+
+                    <div className="w-40 h-40 bg-white border border-slate-200 rounded-3xl flex items-center justify-center text-6xl mb-10 shadow-inner p-8">
+                      <img src={spfLogo} alt="Restricted" className="w-full h-full object-contain grayscale" />
+                    </div>
+                    <h3 className="text-xl font-black text-slate-400 uppercase tracking-[0.5em]">Classified Access</h3>
+                    <p className="text-xs text-slate-400 mt-4 font-bold uppercase tracking-widest">Biometric Authorization Required</p>
+                  </div>}
+              </>
+            )}
           </div>
         </div>
         

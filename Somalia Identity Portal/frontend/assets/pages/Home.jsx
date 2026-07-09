@@ -20,7 +20,7 @@ const Home = () => {
     }, []);
 
     const allServices = getServices(t);
-    const featuredServices = allServices.filter(s => ['id-renew', 'passport-renew', 'criminal-record', 'doc-verify'].includes(s.id));
+    const featuredServices = allServices.filter(s => ['id-renew', 'passport-renew', 'criminal-record'].includes(s.id));
 
     const ArrowIcon = dir === 'rtl' ? ArrowRight : ArrowRight;
 

@@ -2,6 +2,54 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const { PrismaClient } = require('@prisma/client');
+const bcrypt = require('bcryptjs');
+
+// Validation helpers
+const validateText = (value, fieldName) => {
+  if (!value || value.trim() === '') {
+    throw new Error(`${fieldName} is required`);
+  }
+  const textRegex = /^[a-zA-Z\u0600-\u06FF\u0750-\u077F\s\-'\.]+$/;
+  if (!textRegex.test(value)) {
+    throw new Error(`${fieldName} should only contain letters`);
+  }
+  if (value.length > 200) {
+    throw new Error(`${fieldName} is too long (max 200 characters)`);
+  }
+};
+
+const validateNumeric = (value, fieldName, minLength = 1, maxLength = 20) => {
+  if (!value || value.trim() === '') {
+    throw new Error(`${fieldName} is required`);
+  }
+  const numericRegex = /^\d+$/;
+  if (!numericRegex.test(value)) {
+    throw new Error(`${fieldName} should only contain numbers`);
+  }
+  if (value.length < minLength) {
+    throw new Error(`${fieldName} must be at least ${minLength} digits`);
+  }
+  if (value.length > maxLength) {
+    throw new Error(`${fieldName} must be at most ${maxLength} digits`);
+  }
+};
+
+const validateDate = (value, fieldName, allowFuture = false, allowPast = true) => {
+  if (!value) {
+    throw new Error(`${fieldName} is required`);
+  }
+  const date = new Date(value);
+  if (isNaN(date.getTime())) {
+    throw new Error(`${fieldName} is not a valid date`);
+  }
+  const now = new Date();
+  if (!allowFuture && date > now) {
+    throw new Error(`${fieldName} cannot be in the future`);
+  }
+  if (!allowPast && date < now) {
+    throw new Error(`${fieldName} cannot be in the past`);
+  }
+};
 
 // Load environment variables
 dotenv.config();
@@ -44,20 +92,97 @@ app.get('/api/status', async (req, res) => {
     }
 });
 
+// Login endpoint
+app.post('/api/login', async (req, res) => {
+    try {
+        const { username, password } = req.body;
+        
+        if (!username || !password) {
+            return res.status(400).json({ error: 'Username and password are required' });
+        }
+
+        const user = await prisma.users.findUnique({
+            where: { username }
+        });
+
+        if (!user || user.account_type !== 'Police_Officer') {
+            return res.status(401).json({ error: 'Invalid credentials or unauthorized' });
+        }
+
+        const isPasswordValid = await bcrypt.compare(password, user.password_hash);
+        if (!isPasswordValid) {
+            return res.status(401).json({ error: 'Invalid credentials' });
+        }
+
+        res.json({
+            user: {
+                id: user.user_id,
+                username: user.username,
+                email: user.email,
+                accountType: user.account_type,
+                isActive: user.is_active
+            }
+        });
+    } catch (error) {
+        console.error('Login Error:', error);
+        res.status(500).json({ error: 'Login failed', details: error.message });
+    }
+});
+
+// Create user endpoint (for initial setup)
+app.post('/api/users', async (req, res) => {
+    try {
+        const { username, password, email, account_type, employee_id } = req.body;
+        
+        if (!username || !password || !email || !account_type) {
+            return res.status(400).json({ error: 'Required fields missing' });
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        const user = await prisma.users.create({
+            data: {
+                username,
+                password_hash: hashedPassword,
+                email,
+                account_type,
+                employee_id: employee_id || null
+            }
+        });
+
+        res.status(201).json({ message: 'User created successfully', user: { id: user.user_id, username: user.username, account_type: user.account_type } });
+    } catch (error) {
+        console.error('Create User Error:', error);
+        res.status(500).json({ error: 'User creation failed', details: error.message });
+    }
+});
+
 // Criminal Records endpoint
 app.post('/api/criminal-records', async (req, res) => {
     try {
         const { id_number, crime_type, severity, incident_date, court_decision, status } = req.body;
         
-        if (!id_number || !crime_type) {
-            return res.status(400).json({ error: 'id_number and crime_type are required' });
+        // Validation
+        validateNumeric(id_number, 'ID Number', 11, 11);
+        validateText(crime_type, 'Crime Type');
+        
+        if (severity && !['A', 'B', 'C', 'D', 'E', 'F'].includes(severity)) {
+            throw new Error('Invalid severity level');
+        }
+        
+        if (incident_date) {
+            validateDate(incident_date, 'Incident Date', false, true);
+        }
+        
+        if (status && !['open', 'closed'].includes(status)) {
+            throw new Error('Invalid status');
         }
 
         const record = await prisma.criminal_records.create({
             data: {
                 id_number,
                 crime_type,
-                severity: severity || 'MEDIUM',
+                severity: severity || 'C',
                 incident_date: incident_date ? new Date(incident_date) : null,
                 court_decision,
                 status: status || 'open'
@@ -67,7 +192,7 @@ app.post('/api/criminal-records', async (req, res) => {
         res.status(201).json({ message: 'Record created', record });
     } catch (error) {
         console.error('Record Creation Error:', error);
-        res.status(500).json({ error: 'Database operation failed', details: error.message });
+        res.status(400).json({ error: error.message || 'Database operation failed', details: error.message });
     }
 });
 
@@ -87,8 +212,20 @@ app.post('/api/resident-criminal-records', async (req, res) => {
     try {
         const { residence_number, crime_type, severity, incident_date, court_decision, status } = req.body;
         
-        if (!residence_number || !crime_type) {
-            return res.status(400).json({ error: 'residence_number and crime_type are required' });
+        // Validation
+        validateNumeric(residence_number, 'Residence Number', 1, 20);
+        validateText(crime_type, 'Crime Type');
+        
+        if (severity && !['A', 'B', 'C', 'D', 'E', 'F'].includes(severity)) {
+            throw new Error('Invalid severity level');
+        }
+        
+        if (incident_date) {
+            validateDate(incident_date, 'Incident Date', false, true);
+        }
+        
+        if (status && !['open', 'closed'].includes(status)) {
+            throw new Error('Invalid status');
         }
 
         const record = await prisma.resident_criminal_records.create({
@@ -105,7 +242,7 @@ app.post('/api/resident-criminal-records', async (req, res) => {
         res.status(201).json({ message: 'Resident record created', record });
     } catch (error) {
         console.error('Resident Record Creation Error:', error);
-        res.status(500).json({ error: 'Database operation failed', details: error.message });
+        res.status(400).json({ error: error.message || 'Database operation failed', details: error.message });
     }
 });
 
@@ -119,6 +256,53 @@ app.get('/api/resident-criminal-records', async (req, res) => {
     }
 });
 
+
+// Search Criminal Records by various fields
+app.get('/api/criminal-records/search/:searchTerm', async (req, res) => {
+    const { searchTerm } = req.params;
+    
+    if (!searchTerm || searchTerm.trim() === '') {
+        return res.status(400).json({ error: 'Search term is required' });
+    }
+
+    try {
+        // Search citizen criminal records
+        const citizenRecords = await prisma.criminal_records.findMany({
+            where: {
+                OR: [
+                    { id_number: { contains: searchTerm, mode: 'insensitive' } },
+                    { crime_type: { contains: searchTerm, mode: 'insensitive' } },
+                    { court_decision: { contains: searchTerm, mode: 'insensitive' } }
+                ]
+            }
+        });
+
+        // Search resident criminal records
+        const residentRecords = await prisma.resident_criminal_records.findMany({
+            where: {
+                OR: [
+                    { residence_number: { contains: searchTerm, mode: 'insensitive' } },
+                    { crime_type: { contains: searchTerm, mode: 'insensitive' } },
+                    { court_decision: { contains: searchTerm, mode: 'insensitive' } }
+                ]
+            }
+        });
+
+        const allRecords = [
+            ...citizenRecords.map(r => ({ ...r, record_type: 'citizen' })),
+            ...residentRecords.map(r => ({ ...r, record_type: 'resident' }))
+        ];
+
+        if (allRecords.length === 0) {
+            return res.status(404).json({ error: 'No criminal records found' });
+        }
+
+        res.json(allRecords);
+    } catch (error) {
+        console.error('Search Criminal Records Error:', error);
+        res.status(500).json({ error: 'Database search failed', details: error.message });
+    }
+});
 
 // Search person by ID (Citizen or Resident)
 app.get('/api/person/:id_number', async (req, res) => {

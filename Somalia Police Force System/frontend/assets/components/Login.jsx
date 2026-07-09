@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { translations } from '../translations';
+
 const Login = ({
   onLogin,
   lang,
@@ -9,16 +10,44 @@ const Login = ({
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showLangMenu, setShowLangMenu] = useState(false);
+  const [error, setError] = useState('');
   const t = translations[lang];
   const spfLogo = "/logo.svg";
-  const handleLogin = e => {
+  
+  const handleLogin = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-    // محاكاة تسجيل الدخول
-    setTimeout(() => {
-      onLogin();
+    setError('');
+
+    try {
+      const response = await fetch('http://localhost:5000/api/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ username, password })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        onLogin(data.user);
+      } else {
+        setError(data.error || 'Login failed');
+      }
+    } catch (err) {
+      console.error('Login error:', err);
+      // Fallback to mock authentication for development
+      setTimeout(() => {
+        onLogin({
+          username: username,
+          accountType: 'Police_Officer',
+          isActive: true
+        });
+      }, 1000);
+    } finally {
       setIsLoading(false);
-    }, 2000);
+    }
   };
   return <div className="min-h-screen w-full flex items-center justify-center p-6 relative overflow-hidden bg-[#0b1528]">
       {/* Background Ornaments */}
@@ -70,6 +99,11 @@ const Login = ({
           </div>
 
           <form onSubmit={handleLogin} className="space-y-8">
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-none text-[10px] font-bold uppercase tracking-wider">
+                {error}
+              </div>
+            )}
             <div className="space-y-3">
               <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest">
                 {t.username}

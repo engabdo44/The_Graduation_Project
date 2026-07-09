@@ -17,6 +17,8 @@ export const translations = {
       healthRecords: 'Citizen Base',
       birthCert: 'Birth Registry',
       deathCert: 'Mortality Logs',
+      birthCertServices: 'Birth Certificate Services',
+      reports: 'Reports',
       logout: 'Terminate Session'
     },
     dashboard: {
@@ -115,6 +117,8 @@ export const translations = {
       healthRecords: 'قاعدة المواطنين',
       birthCert: 'سجل المواليد',
       deathCert: 'سجلات الوفيات',
+      birthCertServices: 'خدمات شهادات الميلاد',
+      reports: 'التقارير',
       logout: 'إنهاء الجلسة'
     },
     dashboard: {
@@ -213,6 +217,8 @@ export const translations = {
       healthRecords: 'Xogta Muwaadiniinta',
       birthCert: 'Diiwaanka Dhalashada',
       deathCert: 'Diiwaanka Dhimashada',
+      birthCertServices: 'Adeegyada Shahaadada Dhalashada',
+      reports: 'Warbixinada',
       logout: 'Xir Kalfadhiga'
     },
     dashboard: {

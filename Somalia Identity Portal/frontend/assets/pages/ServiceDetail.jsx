@@ -98,8 +98,7 @@ const ServiceDetail = () => {
                                 { icon: Users, label: t.targetAudience, val: t.targetValue, color: 'text-blue-600', bg: 'bg-blue-50' },
                                 { icon: Clock, label: t.durationLabel, val: t.durationValue, color: 'text-gold-600', bg: 'bg-gold-50' },
                                 { icon: Globe, label: t.channelLabel, val: t.channelValue, color: 'text-green-600', bg: 'bg-green-50' },
-                                { icon: Coins, label: t.feesLabel, val: id === 'criminal-record' ? '$0.00' : (isPassport ? '$100.00' : '$15.00'), color: 'text-purple-600', bg: 'bg-purple-50' },
-
+                                { icon: Coins, label: t.feesLabel, val: id === 'criminal-record' || id === 'birth-cert-pdf' ? '$0.00' : (id === 'birth-cert-reprint' ? '$10.00' : (id?.includes('replace') ? '$50.00' : '$100.00')), color: 'text-purple-600', bg: 'bg-purple-50' },
                             ].map((item, i) => (
                                 <div key={i} className="bg-white dark:bg-slate-900/50 p-6 rounded-[2rem] shadow-premium border border-white dark:border-white/5 flex flex-col items-center text-center group hover:border-primary-100 dark:hover:border-gold-500/30 transition-colors">
                                     <div className={`w-12 h-12 ${item.bg} dark:bg-white/10 ${item.color} dark:text-gold-400 rounded-xl flex items-center justify-center mb-4 transition-transform group-hover:scale-110 group-hover:rotate-6`}>

@@ -16,6 +16,8 @@ const ApplicationForm = () => {
     const navigate = useNavigate();
     const [step, setStep] = useState(1);
     const [isSuccess, setIsSuccess] = useState(false);
+    const [validationError, setValidationError] = useState('');
+    const [retrievedData, setRetrievedData] = useState(null);
     const { t, dir } = useLanguage();
 
     // Form State
@@ -43,13 +45,84 @@ const ApplicationForm = () => {
         }
     }, [id]);
 
+    useEffect(() => {
+        if (step === 2 && !retrievedData) {
+            const fetchStoredData = async () => {
+                const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+                const docId = storedUser.national_number || storedUser.residence_number;
+                if (!docId) return;
+
+                if (formData.docType === 'id') {
+                    const res = await fetch(`http://localhost:5000/api/admin/search-id?query=${encodeURIComponent(docId)}`);
+                    const data = await res.json();
+                    if (data.success && data.results.length > 0) {
+                        const person = data.results[0];
+                        const card = person.idCards?.[0] || {};
+                        setRetrievedData({
+                            fullName: person.full_name,
+                            dob: person.dob,
+                            nationality: person.nationality || 'Somali',
+                            docNumber: person.national_number || person.residence_number,
+                            serialNumber: card.issue_number,
+                            gender: person.gender,
+                            issueDate: card.issue_date,
+                            expiryDate: card.expiry_date
+                        });
+                    } else {
+                        setRetrievedData({
+                            fullName: storedUser.full_name || 'N/A',
+                            dob: storedUser.dob || 'N/A',
+                            nationality: storedUser.nationality || 'Somali',
+                            docNumber: storedUser.national_number || storedUser.residence_number || 'N/A',
+                            serialNumber: 'N/A',
+                            gender: storedUser.gender || 'N/A',
+                            issueDate: null,
+                            expiryDate: storedUser.id_expiry || null
+                        });
+                    }
+                } else {
+                    const res = await fetch(`http://localhost:5000/api/admin/search-passport?query=${encodeURIComponent(docId)}`);
+                    const data = await res.json();
+                    if (data.success && data.results.length > 0) {
+                        const hit = data.results[0];
+                        const person = hit.citizen;
+                        const ppt = person.passports?.[0] || {};
+                        setRetrievedData({
+                            fullName: person.full_name,
+                            dob: person.dob,
+                            nationality: person.nationality || 'Somali',
+                            docNumber: ppt.passport_number || hit.passport_number || 'N/A',
+                            serialNumber: 'N/A',
+                            gender: person.gender,
+                            issueDate: ppt.issue_date || hit.issue_date,
+                            expiryDate: ppt.expiry_date || hit.expiry_date
+                        });
+                    } else {
+                        // Fallback state
+                        setRetrievedData({
+                            fullName: storedUser.full_name || 'N/A',
+                            dob: storedUser.dob || 'N/A',
+                            nationality: storedUser.nationality || 'Somali',
+                            docNumber: storedUser.passport_number || 'N/A',
+                            serialNumber: 'N/A',
+                            gender: storedUser.gender || 'N/A',
+                            issueDate: null,
+                            expiryDate: storedUser.passport_expiry || null
+                        });
+                    }
+                }
+            };
+            fetchStoredData();
+        }
+    }, [step, formData.docType, retrievedData]);
+
     if (!service) return null;
 
     const handleNext = async () => {
-        if (step < 5) {
+        if (step < 4) {
             setStep(step + 1);
             window.scrollTo(0, 0);
-        } else if (step === 5) {
+        } else if (step === 4) {
             const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
             const typeValue = storedUser.account_type || 'citizen';
             const accId = storedUser.citizen_id || storedUser.resident_id || storedUser.user_id; // fallback
@@ -58,9 +131,11 @@ const ApplicationForm = () => {
             if (formData.reason === 'lost' || formData.reason === 'damaged') {
                  svcType = id?.includes('passport') ? 'PASSPORT_REPLACEMENT' : 'ID_REPLACEMENT';
             }
+            if (id === 'birth-cert-pdf') svcType = 'BIRTH_CERTIFICATE_PDF';
+            if (id === 'birth-cert-reprint') svcType = 'BIRTH_CERTIFICATE_REPRINT';
 
             try {
-                await fetch('http://localhost:5000/api/user/requests', {
+                const response = await fetch('http://localhost:5000/api/user/requests', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -70,10 +145,19 @@ const ApplicationForm = () => {
                         personal_photo: formData.personal_photo
                     })
                 });
+
+                const data = await response.json();
+                if (!data.success) {
+                    setValidationError(data.message);
+                    return;
+                }
             } catch (e) {
                 console.error(e);
+                setValidationError('Server connection failed. Please try again later.');
+                return;
             }
             
+            setValidationError('');
             setIsSuccess(true);
             window.scrollTo(0, 0);
         }
@@ -159,7 +243,7 @@ const ApplicationForm = () => {
                             <BackIcon size={24} className="group-hover:-translate-x-1 transition-transform" />
                         </button>
                         <div>
-                            <span className="text-gold-600 font-black text-[10px] uppercase tracking-widest mb-1 block">الخطوة {step} من 7</span>
+                            <span className="text-gold-600 font-black text-[10px] uppercase tracking-widest mb-1 block">الخطوة {step} من 4</span>
                             <h1 className="text-3xl font-black text-gray-900 dark:text-white tracking-tight">{service.title}</h1>
                         </div>
                     </div>
@@ -169,7 +253,7 @@ const ApplicationForm = () => {
                     <div className="flex-1 space-y-8">
 
                         <div className="hidden lg:flex justify-between items-center bg-white dark:bg-slate-900/50 p-8 rounded-[2.5rem] shadow-premium border border-white dark:border-white/10">
-                            {[1, 2, 3, 4, 5, 6, 7].map((s) => (
+                            {[1, 2, 3, 4].map((s) => (
                                 <div key={s} className="flex flex-col items-center gap-2 relative">
                                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black transition-all ${step >= s ? 'bg-primary-900 text-gold-400' : 'bg-gray-100 dark:bg-white/5 text-gray-300'
                                         }`}>
@@ -247,19 +331,28 @@ const ApplicationForm = () => {
                                         <div className="space-y-8">
                                             <div className="bg-gray-50 dark:bg-white/5 p-8 rounded-[2rem] border border-gray-100 dark:border-white/10 space-y-6">
                                                 <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t.personalInfoReadOnly}</h4>
-                                                <div className="grid md:grid-cols-2 gap-8">
-                                                    {[
-                                                        { label: t.fullName, val: 'أحمد محمد علي حسن' },
-                                                        { label: t.docNumber, val: 'SO-98712399' },
-                                                        { label: 'تاريخ الميلاد', val: '1992-05-12' },
-                                                        { label: 'الجنسية', val: 'صومالي' }
-                                                    ].map((item, i) => (
-                                                        <div key={i}>
-                                                            <p className="text-[10px] text-primary-400 font-bold mb-1 uppercase tracking-tight">{item.label}</p>
-                                                            <p className="text-gray-900 dark:text-white font-black">{item.val}</p>
-                                                        </div>
-                                                    ))}
-                                                </div>
+                                                
+                                                {!retrievedData ? (
+                                                    <p className="text-gray-500 text-sm font-bold animate-pulse">Loading identity data from database...</p>
+                                                ) : (
+                                                    <div className="grid md:grid-cols-2 gap-8">
+                                                        {[
+                                                            { label: 'Full Name', val: retrievedData.fullName },
+                                                            { label: formData.docType === 'id' ? 'National ID Number' : 'Passport Number', val: retrievedData.docNumber },
+                                                            { label: 'Date of Birth', val: retrievedData.dob ? new Date(retrievedData.dob).toISOString().split('T')[0] : 'N/A' },
+                                                            { label: 'Gender', val: retrievedData.gender?.toUpperCase() || 'N/A' },
+                                                            { label: 'Nationality', val: retrievedData.nationality },
+                                                            { label: 'Serial Number / Issue No.', val: retrievedData.serialNumber },
+                                                            { label: 'Issue Date', val: retrievedData.issueDate ? new Date(retrievedData.issueDate).toISOString().split('T')[0] : 'N/A' },
+                                                            { label: 'Expiry Date', val: retrievedData.expiryDate ? new Date(retrievedData.expiryDate).toISOString().split('T')[0] : 'N/A' }
+                                                        ].map((item, i) => (
+                                                            <div key={i} className="mb-2">
+                                                                <p className="text-[10px] text-primary-400 font-bold mb-1 uppercase tracking-tight">{item.label}</p>
+                                                                <p className="text-gray-900 dark:text-white font-black uppercase">{item.val}</p>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
                                             </div>
 
                                             <div className="space-y-6">
@@ -280,51 +373,6 @@ const ApplicationForm = () => {
                                 )}
 
                                 {step === 3 && (
-                                    <div className="space-y-10 animate-fade-in-up">
-                                        <div className="flex items-center gap-4 pb-6 border-b border-gray-50 dark:border-white/5">
-                                            <div className="w-12 h-12 bg-primary-50 dark:bg-white/10 text-primary-600 dark:text-gold-500 rounded-xl flex items-center justify-center"><Camera size={24} /></div>
-                                            <h2 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">{t.applyStep3}</h2>
-                                        </div>
-
-                                        <div className="grid md:grid-cols-2 gap-8">
-                                            <label className="p-10 border-3 border-dashed border-gray-100 dark:border-white/10 rounded-[3rem] text-center hover:bg-gray-50 transition-all cursor-pointer group flex flex-col items-center justify-center relative overflow-hidden">
-                                                <input 
-                                                    type="file" 
-                                                    accept="image/*" 
-                                                    className="hidden" 
-                                                    onChange={(e) => {
-                                                        const file = e.target.files[0];
-                                                        if (file) {
-                                                            const reader = new FileReader();
-                                                            reader.onloadend = () => setFormData({...formData, personal_photo: reader.result});
-                                                            reader.readAsDataURL(file);
-                                                        }
-                                                    }} 
-                                                />
-                                                {formData.personal_photo ? (
-                                                    <img src={formData.personal_photo} alt="Personal Photo" className="w-full h-full object-cover absolute inset-0 opacity-80" />
-                                                ) : (
-                                                    <div className="w-20 h-20 bg-primary-50 dark:bg-white/10 rounded-3xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
-                                                        <Camera size={32} className="text-primary-900 dark:text-gold-400" />
-                                                    </div>
-                                                )}
-                                                <h4 className="font-black mb-2 text-gray-900 dark:text-white z-10 relative">الصورة الشخصية</h4>
-                                                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest leading-relaxed z-10 relative">بمواصفات رسمية (خلفية بيضاء)</p>
-                                            </label>
-                                            {formData.reason === 'lost' && (
-                                                <div className="p-10 border-3 border-dashed border-gray-100 dark:border-white/10 rounded-[3rem] text-center hover:bg-gray-50 transition-all cursor-pointer group">
-                                                    <div className="w-20 h-20 bg-red-50 dark:bg-red-500/10 rounded-3xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
-                                                        <AlertTriangle size={32} className="text-red-600" />
-                                                    </div>
-                                                    <h4 className="font-black mb-2 text-gray-900 dark:text-white">بلاغ فقدان</h4>
-                                                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest leading-relaxed">شهادة بلاغ من مركز الشرطة</p>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {step === 4 && (
                                     <div className="space-y-10 animate-fade-in-up">
                                         <div className="flex items-center gap-4 pb-6 border-b border-gray-50 dark:border-white/5">
                                             <div className="w-12 h-12 bg-primary-50 dark:bg-white/10 text-primary-600 dark:text-gold-500 rounded-xl flex items-center justify-center"><Calendar size={24} /></div>
@@ -356,7 +404,7 @@ const ApplicationForm = () => {
                                     </div>
                                 )}
 
-                                {step === 5 && (
+                                {step === 4 && (
                                     <div className="space-y-10 animate-fade-in-up">
                                         <div className="flex items-center gap-4 pb-6 border-b border-gray-50 dark:border-white/5">
                                             <div className="w-12 h-12 bg-primary-50 dark:bg-white/10 text-primary-600 dark:text-gold-500 rounded-xl flex items-center justify-center"><Wallet size={24} /></div>
@@ -370,7 +418,9 @@ const ApplicationForm = () => {
                                             <div className="relative z-10 flex flex-col md:flex-row justify-between items-center gap-6">
                                                 <div>
                                                     <p className="text-primary-200 dark:text-primary-950 text-[10px] font-black uppercase tracking-widest mb-1">{t.feeAmount}</p>
-                                                    <h3 className="text-white dark:text-primary-950 text-5xl font-black tracking-tight">$100.00</h3>
+                                                    <h3 className="text-white dark:text-primary-950 text-5xl font-black tracking-tight">
+                                                        {id === 'birth-cert-pdf' ? 'Free ($0.00)' : id === 'birth-cert-reprint' ? '$10.00' : (formData.reason === 'lost' || formData.reason === 'damaged' ? '$50.00' : '$100.00')}
+                                                    </h3>
                                                 </div>
                                                 <div className="flex items-center gap-3 bg-white/10 dark:bg-primary-950/10 px-6 py-3 rounded-2xl border border-white/20">
                                                     <ShieldCheck size={20} className="text-gold-400 dark:text-primary-950" />
@@ -404,12 +454,19 @@ const ApplicationForm = () => {
                                 )}
                             </div>
 
-                            <div className="flex justify-between mt-16 pt-10 border-t border-gray-100 dark:border-white/5 relative z-10">
-                                <button
-                                    type="button"
-                                    onClick={handlePrev}
-                                    className="px-8 py-4 border-2 border-gray-100 dark:border-white/5 rounded-2xl text-gray-700 dark:text-white hover:bg-gray-50 dark:hover:bg-white/5 font-black transition-all flex items-center gap-3 active:scale-95"
-                                >
+                            <div className="flex justify-between mt-16 pt-10 border-t border-gray-100 dark:border-white/5 relative z-10 flex-col gap-6">
+                                {validationError && (
+                                    <div className="bg-red-50 dark:bg-red-500/10 border-l-4 border-red-500 p-4 rounded-r-2xl w-full flex items-center gap-3">
+                                        <AlertTriangle size={24} className="text-red-500 shrink-0" />
+                                        <p className="text-sm font-bold text-red-700 dark:text-red-400 m-0">{validationError}</p>
+                                    </div>
+                                )}
+                                <div className="flex justify-between w-full">
+                                    <button
+                                        type="button"
+                                        onClick={handlePrev}
+                                        className="px-8 py-4 border-2 border-gray-100 dark:border-white/5 rounded-2xl text-gray-700 dark:text-white hover:bg-gray-50 dark:hover:bg-white/5 font-black transition-all flex items-center gap-3 active:scale-95"
+                                    >
                                     <BackIcon size={20} />
                                     {step > 1 ? t.prev : t.cancel}
                                 </button>
@@ -419,9 +476,10 @@ const ApplicationForm = () => {
                                     onClick={handleNext}
                                     className="bg-primary-900 dark:bg-gold-500 hover:bg-primary-950 dark:hover:bg-gold-600 text-white dark:text-primary-950 px-14 py-4 rounded-2xl font-black text-xl transition-all shadow-glow-blue dark:shadow-glow-gold flex items-center gap-4 hover:-translate-y-1 active:scale-95"
                                 >
-                                    {step === 5 ? t.confirmPayment : t.next}
-                                    {step < 5 && <NextIcon size={20} />}
-                                </button>
+                                    {step === 4 ? t.confirmPayment : t.next}
+                                    {step < 4 && <NextIcon size={20} />}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>

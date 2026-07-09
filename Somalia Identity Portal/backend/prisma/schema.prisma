@@ -244,13 +244,16 @@ model Payment {
 }
 
 model Notification {
-  notification_id BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
-  user_id         BigInt    @db.UnsignedBigInt
-  message         String    @db.Text
-  date_sent       DateTime? @default(now()) @db.DateTime(0)
-  status          NotificationStatus? @default(sent)
+  notification_id   BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  user_id           BigInt    @db.UnsignedBigInt
+  title             String    @db.VarChar(200)
+  message           String    @db.Text
+  notification_type String    @db.VarChar(100)
+  is_read           Boolean   @default(false)
+  created_at        DateTime? @default(now()) @db.DateTime(0)
+  status            NotificationStatus? @default(sent)
 
-  user            User      @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  user              User      @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
 
   @@map("notifications")
 }
@@ -299,6 +302,11 @@ enum AccountType {
   citizen
   resident
   admin
+  Ministry_Health_Admin @map("Ministry Health Admin")
+  Police_Officer @map("Police Officer")
+  Printing_Officer @map("Printing Officer")
+  Immigration_Officer @map("Immigration Officer")
+  Immigration_Department_Manager @map("Immigration Department Manager")
 }
 
 enum IdType {
@@ -335,6 +343,8 @@ enum ApplicationStatus {
   approved
   rejected
   completed
+  printing_queue
+  printed
 }
 
 enum RecordStatus {
@@ -368,4 +378,52 @@ enum PaymentStatus {
 enum NotificationStatus {
   sent
   read
+}
+
+model PrintQueue {
+  print_id       BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  document_type  String    @db.VarChar(50)
+  document_number String   @db.VarChar(50)
+  applicant_name String    @db.VarChar(200)
+  request_number String?   @db.VarChar(50)
+  request_date   DateTime? @default(now()) @db.DateTime(0)
+  status         String?   @default("pending") @db.VarChar(50)
+  printed_by     String?   @db.VarChar(200)
+  print_date     DateTime? @db.Date
+  print_time     String?   @db.VarChar(50)
+
+  @@map("print_queue")
+}
+
+model SystemLog {
+  log_id         BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  event_type     String    @db.VarChar(100)
+  module_name    String    @db.VarChar(100)
+  description    String    @db.Text
+  user_id        String?   @db.VarChar(50)
+  username       String?   @db.VarChar(100)
+  account_type   String?   @db.VarChar(80)
+  ip_address     String?   @db.VarChar(50)
+  metadata       String?   @db.Text
+  created_at     DateTime? @default(now()) @db.DateTime(0)
+
+  employee       Employee? @relation(fields: [employee_id], references: [employee_id])
+  employee_id    BigInt?   @db.UnsignedBigInt
+
+  @@map("system_logs")
+}
+
+model Revenue {
+  revenue_id     BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  transaction_type String  @db.VarChar(100)
+  service_name   String    @db.VarChar(200)
+  amount         Decimal   @db.Decimal(10, 2)
+  applicant_name String?   @db.VarChar(200)
+  id_number      String?   @db.VarChar(50)
+  application_id String?   @db.VarChar(50)
+  payment_method String?   @db.VarChar(50)
+  status         String?   @default("completed") @db.VarChar(50)
+  created_at     DateTime? @default(now()) @db.DateTime(0)
+
+  @@map("revenue")
 }

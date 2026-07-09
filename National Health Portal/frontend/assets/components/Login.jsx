@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { translations } from '../translations';
 import LanguageSwitcher from './LanguageSwitcher';
+import { NotificationContainer } from './Notification';
 
 const Login = ({ onLogin, lang, setLang }) => {
   const [credentials, setCredentials] = useState({
@@ -11,32 +12,68 @@ const Login = ({ onLogin, lang, setLang }) => {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [notifications, setNotifications] = useState([]);
 
   const t = translations[lang].login;
 
-  const handleSubmit = (e) => {
+  const addNotification = (type, message) => {
+    const id = Date.now();
+    setNotifications(prev => [...prev, { id, type, message }]);
+  };
+
+  const removeNotification = (id) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
-    setTimeout(() => {
-      if (credentials.username.trim() && credentials.password.trim()) {
+    try {
+      const response = await fetch('http://localhost:5002/api/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          username: credentials.username,
+          password: credentials.password
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        addNotification('success', lang === 'ar' ? 'تم تسجيل الدخول بنجاح' : 'Login successful');
+        
+        // Redirect based on role
+        const redirectView = data.user.role === 'Ministry Health Admin' ? 'MINISTRY_DASHBOARD' : 'DASHBOARD';
+        
         onLogin({
-          name: credentials.username === 'admin' ? 'Dr. Jama Mohamed' : credentials.username,
-          role: credentials.username === 'admin' ? 'System Root' : 'Sector Authorized',
-          node: credentials.nodeId,
-          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${credentials.username}`
+          ...data.user,
+          redirectView
         });
       } else {
-        setError(t.errorEmpty);
+        setError(data.error || t.errorEmpty);
+        addNotification('error', data.error || (lang === 'ar' ? 'فشل تسجيل الدخول' : 'Login failed'));
         setLoading(false);
       }
-    }, 1000);
+    } catch (error) {
+      console.error('Login error:', error);
+      const msg = lang === 'ar'
+        ? 'تعذر الاتصال بالخادم. يرجى المحاولة لاحقاً.'
+        : 'Unable to reach the server. Please try again later.';
+      setError(msg);
+      addNotification('error', msg);
+      setLoading(false);
+    }
   };
 
   return (
     <div className={`min-h-screen bg-gov-navy flex items-center justify-center p-6 guilloche-pattern ${lang === 'ar' ? 'font-arabic' : ''}`}>
       <LanguageSwitcher lang={lang} setLang={setLang} variant="floating" />
+      <NotificationContainer notifications={notifications} removeNotification={removeNotification} lang={lang} />
       <motion.div 
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -112,22 +149,7 @@ const Login = ({ onLogin, lang, setLang }) => {
             </button>
           </form>
 
-          <div className="mt-6 pt-6 border-t border-slate-100">
-            <button 
-              onClick={() => {
-                onLogin({
-                  name: 'Dr. Jama Mohamed',
-                  role: 'System Root',
-                  node: 'MOG-HQ-PRIMARY',
-                  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Admin'
-                });
-              }}
-              className="w-full h-11 bg-gov-blue/5 text-gov-blue rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-gov-blue hover:text-white transition-all flex items-center justify-center gap-2 border border-gov-blue/10"
-            >
-              <i className="fa-solid fa-bolt"></i>
-              {t.quickAccess}
-            </button>
-          </div>
+
 
           <p className="text-center text-[9px] text-slate-400 mt-8 font-medium uppercase tracking-widest leading-relaxed">
             {t.secureNote}

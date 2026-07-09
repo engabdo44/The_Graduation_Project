@@ -347,6 +347,12 @@ enum users_account_type {
   citizen
   resident
   admin
+  police_officer
+  Ministry_Health_Admin @map("Ministry Health Admin")
+  Police_Officer @map("Police Officer")
+  Printing_Officer @map("Printing Officer")
+  Immigration_Officer @map("Immigration Officer")
+  Immigration_Department_Manager @map("Immigration Department Manager")
 }
 
 enum citizens_status {

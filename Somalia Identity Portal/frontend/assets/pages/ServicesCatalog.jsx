@@ -17,10 +17,8 @@ const ServicesCatalog = () => {
         { key: 'all', label: t.home === 'الرئيسية' ? 'الكل' : (t.home === 'Bogga Hore' ? 'Dhammaan' : 'All'), icon: LayoutGrid },
         { key: 'identity', label: t.categories.identity, icon: CreditCard },
         { key: 'passport', label: t.categories.passport, icon: Plane },
+        { key: 'health', label: t.dir === 'rtl' ? 'خدمات شهادة الميلاد' : 'Birth Certificate Services', icon: ShieldAlert },
         { key: 'legal', label: t.categories.legal, icon: ShieldAlert },
-        { key: 'civil', label: t.categories.civil, icon: Home },
-        { key: 'digital', label: t.categories.digital, icon: Smartphone },
-        { key: 'admin', label: t.categories.admin, icon: Briefcase },
     ];
 
     const filteredServices = useMemo(() => {

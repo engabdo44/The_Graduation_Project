@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
     Users, FileText, CheckCircle2, XCircle, Clock,
     TrendingUp, DollarSign, ShieldAlert, MoreVertical,
@@ -8,21 +8,45 @@ import {
     Globe, LogOut, UserCircle, Briefcase, ChevronRight, Menu,
     ScanFace, Fingerprint, ShieldCheck, CreditCard, Landmark,
     Sparkles, Cpu, MapPin, Shield, Award, AlertCircle, Trash2,
-    FileSearch, Moon, Sun, ArrowUpRight, ArrowDownRight, Send, Camera, BookOpen, RotateCw, RefreshCcw, Upload
+    FileSearch, Moon, Sun, ArrowUpRight, ArrowDownRight, Send, Camera, BookOpen, RotateCw, RefreshCcw, Upload, Printer,
+    BarChart2, ScrollText, ChevronLeft, ChevronDown, ChevronUp, Terminal
 } from 'lucide-react';
 import { useLanguage } from '../LanguageContext';
 import { useTheme } from '../ThemeContext';
 import { Link, useNavigate, Routes, Route, useLocation, useSearchParams } from 'react-router-dom';
+import { NationalIDReport, PassportReport, RevenueReport, PrintingReport, UserReport, ActivityLogReport } from './Reports';
+import BirthCertificateServices from './BirthCertificateServices';
 
 // --- Sub-component: AdminSidebar ---
-const AdminSidebar = ({ isOpen, setIsOpen }) => {
+const AdminSidebar = ({ isOpen, setIsOpen, pendingCount = 0 }) => {
     const { t, dir } = useLanguage();
     const location = useLocation();
     const navigate = useNavigate();
+    const [userRole, setUserRole] = useState(null);
+    const [reportsOpen, setReportsOpen] = useState(false);
 
-    const menuItems = [
+    useEffect(() => {
+        const u = localStorage.getItem('user');
+        if (u) setUserRole(JSON.parse(u).account_type);
+    }, []);
+
+    // Auto-expand Reports submenu when on a report page
+    useEffect(() => {
+        if (location.pathname.startsWith('/admin/reports')) setReportsOpen(true);
+    }, [location.pathname]);
+
+    const reportSubItems = [
+        { path: '/admin/reports/national-id', label: dir === 'rtl' ? 'تقارير الهوية الوطنية' : 'National ID Reports', icon: FileText },
+        { path: '/admin/reports/passport', label: dir === 'rtl' ? 'تقارير الجوازات' : 'Passport Reports', icon: Plane },
+        { path: '/admin/reports/revenue', label: dir === 'rtl' ? 'تقارير الإيرادات' : 'Revenue Reports', icon: DollarSign },
+        { path: '/admin/reports/printing', label: dir === 'rtl' ? 'تقارير الطباعة' : 'Printing Reports', icon: Printer },
+        { path: '/admin/reports/users', label: dir === 'rtl' ? 'تقارير المستخدمين' : 'User Reports', icon: Users },
+        { path: '/admin/reports/activity-logs', label: dir === 'rtl' ? 'سجلات النشاط' : 'Activity Log Reports', icon: ScrollText },
+    ];
+
+    let menuItems = [
         { path: '/admin', label: t.sideDashboard, icon: LayoutDashboard },
-        { path: '/admin/requests', label: t.sideRequests, icon: FileSearch, badge: '12' },
+        { path: '/admin/requests', label: t.sideRequests, icon: FileSearch, badge: pendingCount > 0 ? String(pendingCount) : null },
         { path: '/admin/register', label: 'Register Citizen', icon: UserPlus },
         { path: '/admin/register-resident', label: 'Register Resident', icon: Globe },
         { path: '/admin/issue-id', label: 'Issue ID Card', icon: Landmark },
@@ -31,10 +55,25 @@ const AdminSidebar = ({ isOpen, setIsOpen }) => {
         { path: '/admin/renew-passport', label: dir === 'rtl' ? 'تجديد الجواز' : 'Renew Passport', icon: RefreshCcw },
         { path: '/admin/search-id', label: dir === 'rtl' ? 'البحث عن الهوية' : 'Search Identity', icon: ScanFace },
         { path: '/admin/search-passport', label: dir === 'rtl' ? 'البحث عن الجواز' : 'Search Passport', icon: BookOpen },
+        { path: '/admin/birth-certificates', label: dir === 'rtl' ? 'شهادات الميلاد' : 'Birth Certificate Services', icon: FileText },
+        { path: '/admin/print-id', label: dir === 'rtl' ? 'طباعة الهوية' : 'Print National ID', icon: Printer },
+        { path: '/admin/print-passport', label: dir === 'rtl' ? 'طباعة الجواز' : 'Print Passport', icon: Printer },
+        { path: '/admin/printing-queue', label: 'Printing Queue', icon: Printer },
+        { path: '/admin/printing-history', label: 'Printing History', icon: FileText },
+        { path: '/admin/revenue', label: dir === 'rtl' ? 'لوحة الإيرادات' : 'Revenue Dashboard', icon: BarChart2 },
+        { path: '/admin/logs', label: dir === 'rtl' ? 'سجلات النظام' : 'Activity Logs', icon: ScrollText },
+        { path: '/admin/users', label: 'User Management', icon: Users },
         { path: '/admin/profile', label: t.sideStaffProfile, icon: Briefcase },
     ];
 
+    if (userRole === 'Printing_Officer') {
+        menuItems = menuItems.filter(i => ['/admin', '/admin/print-id', '/admin/print-passport', '/admin/printing-queue', '/admin/printing-history', '/admin/profile'].includes(i.path));
+    } else if (userRole === 'Immigration_Officer') {
+        menuItems = menuItems.filter(i => ['/admin', '/admin/requests', '/admin/passports', '/admin/renew-passport', '/admin/search-passport', '/admin/profile'].includes(i.path));
+    }
+
     const handleLogout = () => navigate('/');
+    const isReportsActive = location.pathname.startsWith('/admin/reports');
 
     return (
         <aside className={`fixed top-0 bottom-0 z-50 w-72 bg-[#020617] text-white border-r border-white/5 transition-transform duration-500 ease-in-out shadow-2xl flex flex-col
@@ -81,6 +120,48 @@ const AdminSidebar = ({ isOpen, setIsOpen }) => {
                         </Link>
                     );
                 })}
+
+                {/* ─── Reports Group ───────────────────────────────── */}
+                <div>
+                    <button
+                        onClick={() => setReportsOpen(v => !v)}
+                        className={`w-full flex items-center gap-3 px-5 py-3 rounded-xl transition-all duration-200 border ${isReportsActive
+                            ? 'bg-primary-600/90 text-white border-primary-500 shadow-lg'
+                            : 'hover:bg-white/5 text-gray-300 border-transparent'
+                            }`}
+                    >
+                        <BarChart2 size={18} className={isReportsActive ? 'text-white' : 'text-gold-500'} />
+                        <span className="text-[13px] font-bold flex-1 text-left">
+                            {dir === 'rtl' ? 'التقارير' : 'Reports'}
+                        </span>
+                        {reportsOpen
+                            ? <ChevronUp size={14} className="text-gray-400" />
+                            : <ChevronDown size={14} className="text-gray-400" />
+                        }
+                    </button>
+
+                    {reportsOpen && (
+                        <div className="mt-1 ms-4 ps-4 border-s border-white/10 space-y-1">
+                            {reportSubItems.map(sub => {
+                                const isSubActive = location.pathname === sub.path;
+                                return (
+                                    <Link
+                                        key={sub.path}
+                                        to={sub.path}
+                                        onClick={() => setIsOpen(false)}
+                                        className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-200 border ${isSubActive
+                                            ? 'bg-primary-600/80 text-white border-primary-500'
+                                            : 'hover:bg-white/5 text-gray-400 border-transparent hover:text-gray-200'
+                                            }`}
+                                    >
+                                        <sub.icon size={15} className={isSubActive ? 'text-white' : 'text-gold-400/70'} />
+                                        <span className="text-[12px] font-bold">{sub.label}</span>
+                                    </Link>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
             </nav>
 
             <div className="p-4 bg-black/20 border-t border-white/5">
@@ -95,6 +176,7 @@ const AdminSidebar = ({ isOpen, setIsOpen }) => {
         </aside>
     );
 };
+
 
 // --- Sub-component: PhotoCapture ---
 const PhotoCapture = ({ photo, setPhoto, label = "Upload or Capture Photo" }) => {
@@ -190,6 +272,8 @@ const RequestsApproval = () => {
     const { t, dir } = useLanguage();
     const navigate = useNavigate();
     const [requests, setRequests] = useState([]);
+    const [filterStatus, setFilterStatus] = useState('all');
+    const [confirmModal, setConfirmModal] = useState({ isOpen: false, id: null, action: null });
 
     React.useEffect(() => {
         const fetchRequests = async () => {
@@ -202,7 +286,14 @@ const RequestsApproval = () => {
         fetchRequests();
     }, []);
 
-    const handleAction = async (id, action) => {
+    const handleActionClick = (id, action) => {
+        setConfirmModal({ isOpen: true, id, action });
+    };
+
+    const confirmAction = async () => {
+        const { id, action } = confirmModal;
+        if (!id || !action) return;
+
         try {
             const status = action === 'approve' ? 'approved' : 'rejected';
             const res = await fetch(`http://localhost:5000/api/admin/requests/${id}`, {
@@ -212,9 +303,21 @@ const RequestsApproval = () => {
             });
             const data = await res.json();
             if (data.success) {
-                setRequests(prev => prev.map(r => r.application_id.toString() === id.toString() ? { ...r, status } : r));
+                // Use the actual status returned by backend (replacements become 'printing_queue')
+                const actualStatus = data.request?.status || status;
+                setRequests(prev => prev.map(r => r.application_id.toString() === id.toString() ? { ...r, status: actualStatus } : r));
+                if (data.auto_queued) {
+                    alert('✅ ' + (dir === 'rtl' ? 'تمت الموافقة وتم إرسال الطلب تلقائياً إلى طابور الطباعة.' : 'Approved! Request automatically sent to the Printing Queue.'));
+                }
+            } else {
+                alert(dir === 'rtl' ? 'حدث خطأ أثناء معالجة الطلب.' : 'An error occurred while processing the request.');
             }
-        } catch (e) { console.error(e); }
+        } catch (e) {
+            console.error(e);
+            alert(dir === 'rtl' ? 'فشل الاتصال بالخادم.' : 'Failed to communicate with server.');
+        } finally {
+            setConfirmModal({ isOpen: false, id: null, action: null });
+        }
     };
 
     return (
@@ -230,9 +333,17 @@ const RequestsApproval = () => {
                         <Search className="absolute ltr:left-3 rtl:right-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
                         <input type="text" placeholder="Search..." className="ltr:pl-9 rtl:pr-9 pr-4 py-2 bg-white dark:bg-primary-900 border border-gray-200 dark:border-white/10 rounded-xl text-xs font-bold outline-none focus:border-primary-500 w-56 text-gray-900 dark:text-white transition-all" />
                     </div>
-                    <button className="p-2.5 bg-white dark:bg-primary-900 border border-gray-200 dark:border-white/10 rounded-xl text-gray-500 dark:text-gray-400 hover:text-primary-600 shadow-sm">
-                        <Filter size={16} />
-                    </button>
+                    <div className="flex gap-2 p-1 bg-gray-100 dark:bg-white/5 rounded-xl border border-gray-200 dark:border-white/10 shrink-0 overflow-x-auto">
+                        {['all', 'under_review', 'approved', 'printing_queue', 'rejected', 'completed'].map(f => (
+                            <button
+                                key={f}
+                                onClick={() => setFilterStatus(f)}
+                                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all ${filterStatus === f ? 'bg-white dark:bg-primary-600 text-primary-900 dark:text-white shadow-sm' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/10'}`}
+                            >
+                                {f === 'all' ? 'All' : f === 'under_review' ? 'Pending' : f === 'printing_queue' ? 'In Queue' : f}
+                            </button>
+                        ))}
+                    </div>
                 </div>
             </div>
 
@@ -249,8 +360,10 @@ const RequestsApproval = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50 dark:divide-white/5">
-                            {requests.map((req) => {
+                            {requests.filter(r => filterStatus === 'all' ? true : r.status === filterStatus).map((req) => {
                                 const reqName = req.citizen?.full_name || req.resident?.full_name || 'Unknown';
+                                const isRenewal = req.service_type === 'PASSPORT_RENEWAL' || req.service_type === 'ID_RENEWAL';
+                                const isPassportService = req.service_type?.includes('PASSPORT');
                                 return (
                                 <tr key={req.application_id} className="group hover:bg-gray-50 dark:hover:bg-white/5 transition-all">
                                     <td className="px-6 py-3.5">
@@ -265,34 +378,48 @@ const RequestsApproval = () => {
                                         </div>
                                     </td>
                                     <td className="px-4 py-3.5">
-                                        <span className="text-[10px] font-black text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-white/10 px-2 py-1 rounded-md border border-gray-200 dark:border-white/10 lowercase">{req.service_type.replace('_', ' ')}</span>
+                                        <span className="text-[10px] font-black text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-white/10 px-2 py-1 rounded-md border border-gray-200 dark:border-white/10 lowercase">{req.service_type.replace(/_/g, ' ')}</span>
                                     </td>
                                     <td className="px-4 py-3.5">
                                         <div className={`inline-flex items-center gap-2 px-2 py-1 rounded-md border ${
                                             req.status === 'under_review' ? 'bg-blue-50 border-blue-100 text-blue-600 dark:bg-blue-500/10 dark:border-blue-500/20 dark:text-blue-400' :
                                             req.status === 'approved' ? 'bg-green-50 border-green-100 text-green-600 dark:bg-green-500/10 dark:border-green-500/20 dark:text-green-400' :
+                                            req.status === 'printing_queue' ? 'bg-purple-50 border-purple-100 text-purple-600 dark:bg-purple-500/10 dark:border-purple-500/20 dark:text-purple-400' :
+                                            req.status === 'printed' ? 'bg-indigo-50 border-indigo-100 text-indigo-600 dark:bg-indigo-500/10 dark:border-indigo-500/20 dark:text-indigo-400' :
                                             req.status === 'completed' ? 'bg-teal-50 border-teal-100 text-teal-600 dark:bg-teal-500/10 dark:border-teal-500/20 dark:text-teal-400' :
                                             'bg-red-50 border-red-100 text-red-600 dark:bg-red-500/10 dark:border-red-500/20 dark:text-red-400'
                                             }`}>
-                                            <div className={`w-1.5 h-1.5 rounded-full ${req.status === 'under_review' ? 'bg-blue-500 animate-pulse' : req.status === 'completed' ? 'bg-teal-500' : req.status === 'approved' ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                                            <span className="text-[9px] font-black uppercase">{req.status.replace('_', ' ')}</span>
+                                            <div className={`w-1.5 h-1.5 rounded-full ${
+                                                req.status === 'under_review' ? 'bg-blue-500 animate-pulse' :
+                                                req.status === 'printing_queue' ? 'bg-purple-500 animate-pulse' :
+                                                req.status === 'printed' ? 'bg-indigo-500' :
+                                                req.status === 'completed' ? 'bg-teal-500' :
+                                                req.status === 'approved' ? 'bg-green-500' : 'bg-red-500'
+                                            }`}></div>
+                                            <span className="text-[9px] font-black uppercase">{req.status.replace(/_/g, ' ')}</span>
                                         </div>
                                     </td>
                                     <td className="px-6 py-3.5">
                                         <div className="flex items-center justify-end gap-2">
                                             {req.status === 'under_review' ? (
                                                 <>
-                                                    <button onClick={() => handleAction(req.application_id, 'approve')} className="w-8 h-8 bg-green-50 dark:bg-green-500/10 text-green-600 hover:bg-green-600 hover:text-white rounded-lg flex items-center justify-center transition-all border border-green-200 dark:border-green-500/20"><Check size={16} /></button>
-                                                    <button onClick={() => handleAction(req.application_id, 'reject')} className="w-8 h-8 bg-red-50 dark:bg-red-500/10 text-red-600 hover:bg-red-600 hover:text-white rounded-lg flex items-center justify-center transition-all border border-red-200 dark:border-red-500/20"><X size={16} /></button>
+                                                    <button onClick={() => handleActionClick(req.application_id, 'approve')} className="w-8 h-8 bg-green-50 dark:bg-green-500/10 text-green-600 hover:bg-green-600 hover:text-white rounded-lg flex items-center justify-center transition-all border border-green-200 dark:border-green-500/20"><Check size={16} /></button>
+                                                    <button onClick={() => handleActionClick(req.application_id, 'reject')} className="w-8 h-8 bg-red-50 dark:bg-red-500/10 text-red-600 hover:bg-red-600 hover:text-white rounded-lg flex items-center justify-center transition-all border border-red-200 dark:border-red-500/20"><X size={16} /></button>
                                                 </>
                                             ) : (
                                                 <div className="flex items-center gap-2">
-                                                    <span className="text-[10px] font-bold text-gray-500">{req.status === 'approved' ? 'Accepted' : req.status === 'completed' ? 'Finalized' : 'Rejected'}</span>
-                                                    {req.status === 'approved' && (
-                                                        <button 
+                                                    <span className="text-[10px] font-bold text-gray-500">
+                                                        {req.status === 'approved' ? 'Approved' :
+                                                         req.status === 'printing_queue' ? '🖨️ In Queue' :
+                                                         req.status === 'printed' ? 'Printed' :
+                                                         req.status === 'completed' ? 'Finalized' : 'Rejected'}
+                                                    </span>
+                                                    {/* Proceed button: only for RENEWAL types awaiting processing */}
+                                                    {req.status === 'approved' && isRenewal && (
+                                                        <button
                                                             onClick={() => {
                                                                 const refNum = req.citizen?.national_number || req.resident?.residence_number || '';
-                                                                const path = req.service_type.includes('passport') ? '/admin/renew-passport' : '/admin/renew-id';
+                                                                const path = isPassportService ? '/admin/renew-passport' : '/admin/renew-id';
                                                                 navigate(`${path}?appId=${req.application_id}&ref=${refNum}`);
                                                             }}
                                                             className="px-2 py-1 bg-primary-600 text-white rounded text-[9px] font-black uppercase flex items-center gap-1 hover:bg-primary-700 transition-all"
@@ -310,85 +437,397 @@ const RequestsApproval = () => {
                     </table>
                 </div>
             </div>
+
+            {confirmModal.isOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white dark:bg-primary-900 p-8 rounded-[2rem] shadow-premium max-w-sm w-full border border-gray-200 dark:border-white/10 animate-fade-in-up text-center">
+                        <div className={`w-16 h-16 mx-auto rounded-2xl flex items-center justify-center mb-6 shadow-lg ${confirmModal.action === 'approve' ? 'bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-400 border border-green-200 dark:border-green-500/30' : 'bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400 border border-red-200 dark:border-red-500/30'}`}>
+                            {confirmModal.action === 'approve' ? <CheckCircle2 size={32} /> : <XCircle size={32} />}
+                        </div>
+                        <h3 className="text-xl font-black text-gray-900 dark:text-white mb-2">
+                            {dir === 'rtl' ? 'تأكيد العملية' : 'Confirm Action'}
+                        </h3>
+                        <p className="text-sm font-bold text-gray-500 dark:text-gray-400 mb-8">
+                            {confirmModal.action === 'approve'
+                                ? (dir === 'rtl' ? 'هل أنت متأكد من قبول هذا الطلب؟' : 'Are you sure you want to approve this request?')
+                                : (dir === 'rtl' ? 'هل أنت متأكد من رفض هذا الطلب؟' : 'Are you sure you want to reject this request?')}
+                        </p>
+                        <div className="flex gap-4">
+                            <button onClick={() => setConfirmModal({ isOpen: false, id: null, action: null })} className="flex-1 px-4 py-3 bg-gray-100 hover:bg-gray-200 dark:bg-white/5 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300 rounded-xl font-black text-xs uppercase tracking-widest transition-all border border-transparent dark:border-white/5">
+                                {dir === 'rtl' ? 'إلغاء' : 'Cancel'}
+                            </button>
+                            <button onClick={confirmAction} className={`flex-1 px-4 py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all shadow-md text-white ${confirmModal.action === 'approve' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}>
+                                {dir === 'rtl' ? 'تأكيد' : 'Confirm'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
 
 // --- Sub-component: Dashboard Overview ---
 const DashboardOverview = () => {
-    const { t } = useLanguage();
-    const stats = [
-        { label: 'Total Requests', val: '14,284', trend: '+12%', up: true, icon: FileText, color: 'text-blue-600', bg: 'bg-blue-50' },
-        { label: 'Pending Verification', val: '286', trend: '-5%', up: false, icon: Clock, color: 'text-gold-600', bg: 'bg-gold-50' },
-        { label: 'Today Approvals', val: '156', trend: '+24%', up: true, icon: CheckCircle2, color: 'text-green-600', bg: 'bg-green-50' },
-        { label: 'Gov Revenue', val: '$148k', trend: '+8%', up: true, icon: DollarSign, color: 'text-purple-600', bg: 'bg-purple-50' },
+    const { dir } = useLanguage();
+    const [stats, setStats] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [trendPeriod, setTrendPeriod] = useState('daily');
+
+    const fetchStats = async () => {
+        try {
+            const res = await fetch('http://localhost:5000/api/admin/dashboard-stats');
+            const data = await res.json();
+            if (data.success) setStats(data.stats);
+        } catch (e) { console.error(e); } finally { setLoading(false); }
+    };
+
+    useEffect(() => {
+        fetchStats();
+        const iv = setInterval(fetchStats, 60000);
+        return () => clearInterval(iv);
+    }, []);
+
+    const fmt = (n) => {
+        if (n >= 1000000) return `$${(n / 1000000).toFixed(1)}M`;
+        if (n >= 1000) return `$${(n / 1000).toFixed(1)}k`;
+        return `$${n.toFixed(2)}`;
+    };
+
+    const serviceLabels = {
+        NATIONAL_ID: dir === 'rtl' ? 'هوية جديدة' : 'New ID',
+        RENEWAL: dir === 'rtl' ? 'تجديد' : 'Renewal',
+        ID_REPLACEMENT: dir === 'rtl' ? 'بدل هوية' : 'ID Replacement',
+        PASSPORT: dir === 'rtl' ? 'جواز جديد' : 'New Passport',
+        PASSPORT_RENEWAL: dir === 'rtl' ? 'تجديد جواز' : 'Passport Renewal',
+        PASSPORT_REPLACEMENT: dir === 'rtl' ? 'بدل جواز' : 'Passport Replacement',
+    };
+
+    const statusColors = {
+        pending: '#f59e0b',
+        approved: '#10b981',
+        rejected: '#ef4444',
+        completed: '#3b82f6',
+        printing_queue: '#8b5cf6',
+    };
+
+    const statusLabels = {
+        pending: dir === 'rtl' ? 'انتظار' : 'Pending',
+        approved: dir === 'rtl' ? 'موافق' : 'Approved',
+        rejected: dir === 'rtl' ? 'مرفوض' : 'Rejected',
+        completed: dir === 'rtl' ? 'مكتمل' : 'Completed',
+        printing_queue: dir === 'rtl' ? 'طباعة' : 'Printing',
+    };
+
+    if (loading) {
+        return (
+            <div className="space-y-8 animate-fade-in">
+                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {[0, 1, 2, 3].map(i => (
+                        <div key={i} className="bg-white dark:bg-primary-900 p-6 rounded-2xl shadow-premium border border-gray-200 dark:border-white/5 animate-pulse">
+                            <div className="w-10 h-10 bg-gray-200 dark:bg-white/5 rounded-xl mb-6" />
+                            <div className="h-3 bg-gray-200 dark:bg-white/5 rounded w-3/4 mb-3" />
+                            <div className="h-8 bg-gray-200 dark:bg-white/5 rounded w-1/2" />
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    }
+
+    const totalReqs = stats?.totalRequests || 0;
+    const pending = stats?.pendingRequests || 0;
+    const todayApp = stats?.todayApprovals || 0;
+    const revenue = stats?.totalRevenue || 0;
+
+    const statCards = [
+        {
+            label: dir === 'rtl' ? 'إجمالي الطلبات' : 'Total Requests',
+            val: totalReqs.toLocaleString(),
+            icon: FileText, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-500/10',
+            subtext: dir === 'rtl' ? 'هوية + جواز + تجديد + بدل' : 'ID + Passport + Renewal + Lost'
+        },
+        {
+            label: dir === 'rtl' ? 'قيد التحقق' : 'Pending Verification',
+            val: pending.toLocaleString(),
+            icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-500/10',
+            subtext: dir === 'rtl' ? 'تنتظر المراجعة' : 'Awaiting review'
+        },
+        {
+            label: dir === 'rtl' ? 'موافقات اليوم' : 'Today Approvals',
+            val: todayApp.toLocaleString(),
+            icon: CheckCircle2, color: 'text-green-600', bg: 'bg-green-50 dark:bg-green-500/10',
+            subtext: dir === 'rtl' ? 'تمت المعالجة اليوم' : 'Processed today'
+        },
+        {
+            label: dir === 'rtl' ? 'إيرادات الحكومة' : 'Gov Revenue',
+            val: fmt(revenue),
+            icon: DollarSign, color: 'text-purple-600', bg: 'bg-purple-50 dark:bg-purple-500/10',
+            subtext: dir === 'rtl' ? 'من المعاملات المكتملة' : 'From completed transactions'
+        },
     ];
+
+    // Trend chart data
+    const trend = stats?.dailyTrend || [];
+    const maxTrend = Math.max(...trend.map(d => d.submitted), 1);
+
+    // Status donut chart
+    const statusDist = stats?.statusDistribution || [];
+    const totalStatus = statusDist.reduce((acc, s) => acc + s.count, 0) || 1;
+    let cumulative = 0;
+    const donutSegments = statusDist.map(s => {
+        const pct = (s.count / totalStatus) * 100;
+        const seg = { ...s, pct, offset: cumulative, color: statusColors[s.status] || '#94a3b8' };
+        cumulative += pct;
+        return seg;
+    });
+
+    // Service usage
+    const svcUsage = stats?.serviceUsage || [];
+    const maxSvc = Math.max(...svcUsage.map(s => s.count), 1);
 
     return (
         <div className="space-y-8 animate-fade-in">
+            {/* Stat Cards */}
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                {stats.map((s, i) => (
-                    <div key={i} className="bg-white dark:bg-primary-900 p-6 rounded-2xl shadow-premium border border-gray-200 dark:border-white/5 group relative overflow-hidden">
-                        <div className="flex justify-between items-start mb-6">
-                            <div className={`w-10 h-10 ${s.bg} dark:bg-white/5 ${s.color} dark:text-white rounded-xl flex items-center justify-center shadow-sm border dark:border-white/10`}>
-                                <s.icon size={20} />
+                {statCards.map((s, i) => (
+                    <div key={i} className="bg-white dark:bg-primary-900 p-6 rounded-2xl shadow-premium border border-gray-200 dark:border-white/5 group relative overflow-hidden hover:border-primary-200 dark:hover:border-white/10 transition-all">
+                        <div className="absolute inset-0 bg-gradient-to-br from-transparent to-gray-50/50 dark:to-white/[0.02] pointer-events-none" />
+                        <div className="flex justify-between items-start mb-5 relative">
+                            <div className={`w-11 h-11 ${s.bg} ${s.color} rounded-xl flex items-center justify-center shadow-sm`}>
+                                <s.icon size={22} />
                             </div>
-                            <div className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black uppercase ${s.up ? 'text-green-600 bg-green-50 dark:bg-green-500/10' : 'text-red-600 bg-red-50 dark:bg-red-500/10'}`}>
-                                {s.up ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
-                                {s.trend}
-                            </div>
+                            <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
                         </div>
-                        <p className="text-[10px] text-gray-500 dark:text-gray-400 font-black uppercase tracking-widest mb-1">{s.label}</p>
-                        <h3 className="text-3xl font-black text-gray-900 dark:text-white tracking-tight">{s.val}</h3>
+                        <p className="text-[10px] text-gray-400 dark:text-gray-500 font-black uppercase tracking-widest mb-1 relative">{s.label}</p>
+                        <h3 className="text-3xl font-black text-gray-900 dark:text-white tracking-tight relative">{s.val}</h3>
+                        <p className="text-[10px] text-gray-400 mt-2 font-bold relative">{s.subtext}</p>
                     </div>
                 ))}
             </div>
 
+            {/* Charts Row 1: Trend + Status */}
             <div className="grid lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 bg-white dark:bg-primary-900 rounded-2xl shadow-premium border border-gray-200 dark:border-white/5 overflow-hidden flex flex-col">
-                    <div className="p-6 border-b border-gray-100 dark:border-white/5 flex items-center justify-between bg-gray-50/50 dark:bg-black/10">
+                {/* 7-Day Trend Chart */}
+                <div className="lg:col-span-2 bg-white dark:bg-primary-900 rounded-2xl shadow-premium border border-gray-200 dark:border-white/5 overflow-hidden">
+                    <div className="p-6 border-b border-gray-100 dark:border-white/5 flex items-center justify-between">
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 bg-primary-600 text-white rounded-xl flex items-center justify-center shadow-md">
-                                <Activity size={20} />
+                                <TrendingUp size={20} />
                             </div>
                             <div>
-                                <h2 className="text-sm font-black text-gray-900 dark:text-white tracking-tight">Infrastructure Monitor</h2>
-                                <p className="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase mt-0.5">Real-time status</p>
+                                <h2 className="text-sm font-black text-gray-900 dark:text-white tracking-tight">
+                                    {dir === 'rtl' ? 'اتجاه الطلبات (آخر 7 أيام)' : 'Request Trend (Last 7 Days)'}
+                                </h2>
+                                <p className="text-[10px] text-gray-400 font-bold uppercase mt-0.5">
+                                    {dir === 'rtl' ? 'مقدمة • موافقة • مرفوضة' : 'Submitted • Approved • Rejected'}
+                                </p>
                             </div>
                         </div>
-                        <button className="px-3 py-1.5 bg-white dark:bg-white/5 text-gray-600 dark:text-white rounded-lg text-[10px] font-black border border-gray-200 dark:border-white/10 uppercase tracking-widest">Logs</button>
+                        <div className="flex gap-1.5">
+                            {[
+                                { key: 'submitted', color: 'bg-primary-500' },
+                                { key: 'approved', color: 'bg-green-500' },
+                                { key: 'rejected', color: 'bg-red-400' },
+                            ].map(l => (
+                                <div key={l.key} className="flex items-center gap-1">
+                                    <div className={`w-2 h-2 rounded-full ${l.color}`} />
+                                    <span className="text-[9px] font-bold text-gray-400 uppercase">{l.key.slice(0, 3)}</span>
+                                </div>
+                            ))}
+                        </div>
                     </div>
-
-                    <div className="flex-grow p-12 text-center flex flex-col items-center justify-center">
-                        <div className="relative mb-6">
-                            <div className="w-24 h-24 rounded-full border-[6px] border-primary-50 dark:border-white/5 border-t-primary-600 dark:border-t-gold-500 animate-spin"></div>
-                            <div className="absolute inset-0 flex items-center justify-center">
-                                <Cpu size={32} className="text-primary-600 dark:text-gold-500" />
+                    <div className="p-6">
+                        {trend.length === 0 ? (
+                            <div className="flex items-center justify-center h-40 text-gray-400 text-sm font-bold">
+                                {dir === 'rtl' ? 'لا توجد بيانات' : 'No data available'}
                             </div>
-                        </div>
-                        <h3 className="text-lg font-black text-gray-900 dark:text-white mb-1">Optimizing Data Flows</h3>
-                        <p className="text-gray-500 dark:text-gray-400 font-medium text-xs max-w-xs leading-relaxed">Processing 1,248 p/s across 12 biometric hubs.</p>
+                        ) : (
+                            <div className="flex items-end gap-2 h-48 w-full">
+                                {trend.map((day, i) => (
+                                    <div key={i} className="flex-1 flex flex-col items-center gap-1 group/bar">
+                                        <div className="w-full flex flex-col-reverse gap-0.5 items-center" style={{ height: '160px' }}>
+                                            {/* Submitted bar */}
+                                            <div
+                                                title={`Submitted: ${day.submitted}`}
+                                                className="w-full bg-primary-500/80 hover:bg-primary-500 rounded-sm transition-all cursor-pointer relative"
+                                                style={{ height: `${(day.submitted / maxTrend) * 140}px`, minHeight: day.submitted > 0 ? '4px' : '0' }}
+                                            />
+                                        </div>
+                                        {/* Approved dot */}
+                                        <div className="flex gap-1 mt-1">
+                                            {day.approved > 0 && <div className="w-1.5 h-1.5 rounded-full bg-green-500" title={`Approved: ${day.approved}`} />}
+                                            {day.rejected > 0 && <div className="w-1.5 h-1.5 rounded-full bg-red-400" title={`Rejected: ${day.rejected}`} />}
+                                        </div>
+                                        <span className="text-[8px] text-gray-400 font-bold">{day.date.slice(5)}</span>
+                                        <span className="text-[9px] font-black text-gray-600 dark:text-gray-300">{day.submitted}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
 
-                <div className="bg-[#020617] rounded-2xl p-8 text-white relative overflow-hidden shadow-2xl flex flex-col justify-between border border-white/5">
-                    <div className="relative z-10">
-                        <div className="w-12 h-12 bg-white/5 backdrop-blur-xl rounded-xl flex items-center justify-center mb-6 border border-white/10">
-                            <Award size={24} className="text-gold-500" />
+                {/* Status Donut */}
+                <div className="bg-white dark:bg-primary-900 rounded-2xl shadow-premium border border-gray-200 dark:border-white/5 overflow-hidden">
+                    <div className="p-6 border-b border-gray-100 dark:border-white/5">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-amber-500 text-white rounded-xl flex items-center justify-center shadow-md">
+                                <Activity size={20} />
+                            </div>
+                            <div>
+                                <h2 className="text-sm font-black text-gray-900 dark:text-white tracking-tight">
+                                    {dir === 'rtl' ? 'توزيع الحالات' : 'Status Distribution'}
+                                </h2>
+                                <p className="text-[10px] text-gray-400 font-bold uppercase mt-0.5">
+                                    {dir === 'rtl' ? 'النسب المئوية' : 'Percentages & Totals'}
+                                </p>
+                            </div>
                         </div>
-                        <h3 className="text-2xl font-black mb-3 leading-tight">Identity Guard</h3>
-                        <p className="text-primary-100 text-[13px] font-medium leading-relaxed opacity-80">Encryption: <span className="text-gold-400 font-bold">AES-256</span> active on all terminals.</p>
                     </div>
-                    <div className="relative z-10 pt-8">
-                        <button className="w-full bg-white text-primary-950 font-black py-4 rounded-xl shadow-xl hover:bg-gold-500 transition-all flex items-center justify-center gap-2 text-xs uppercase tracking-[0.15em]">
-                            Start Security Audit
-                        </button>
+                    <div className="p-6">
+                        {statusDist.length === 0 ? (
+                            <div className="flex items-center justify-center h-40 text-gray-400 text-sm font-bold">
+                                {dir === 'rtl' ? 'لا توجد بيانات' : 'No data yet'}
+                            </div>
+                        ) : (
+                            <>
+                                {/* SVG Donut */}
+                                <div className="flex justify-center mb-4">
+                                    <svg viewBox="0 0 120 120" className="w-32 h-32">
+                                        {donutSegments.map((seg, i) => {
+                                            const r = 45;
+                                            const circ = 2 * Math.PI * r;
+                                            const strokeDash = (seg.pct / 100) * circ;
+                                            const strokeOffset = circ - (seg.offset / 100) * circ;
+                                            return (
+                                                <circle key={i}
+                                                    cx="60" cy="60" r={r}
+                                                    fill="none"
+                                                    stroke={seg.color}
+                                                    strokeWidth="18"
+                                                    strokeDasharray={`${strokeDash} ${circ - strokeDash}`}
+                                                    strokeDashoffset={strokeOffset}
+                                                    style={{ transition: 'stroke-dasharray 0.5s ease' }}
+                                                />
+                                            );
+                                        })}
+                                        <text x="60" y="64" textAnchor="middle" className="text-xs font-black" fontSize="14" fontWeight="900" fill="currentColor" style={{ fill: '#6b7280' }}>
+                                            {totalStatus}
+                                        </text>
+                                    </svg>
+                                </div>
+                                <div className="space-y-2">
+                                    {donutSegments.map((seg, i) => (
+                                        <div key={i} className="flex items-center justify-between text-xs">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: seg.color }} />
+                                                <span className="font-bold text-gray-600 dark:text-gray-300">{statusLabels[seg.status] || seg.status}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-black text-gray-900 dark:text-white">{seg.count}</span>
+                                                <span className="text-gray-400 text-[10px]">{seg.pct.toFixed(1)}%</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* Charts Row 2: Service Usage + Revenue Breakdown */}
+            <div className="grid lg:grid-cols-2 gap-6">
+                {/* Service Usage */}
+                <div className="bg-white dark:bg-primary-900 rounded-2xl shadow-premium border border-gray-200 dark:border-white/5 overflow-hidden">
+                    <div className="p-6 border-b border-gray-100 dark:border-white/5 flex items-center gap-3">
+                        <div className="w-10 h-10 bg-purple-600 text-white rounded-xl flex items-center justify-center shadow-md">
+                            <BarChart2 size={20} />
+                        </div>
+                        <div>
+                            <h2 className="text-sm font-black text-gray-900 dark:text-white tracking-tight">
+                                {dir === 'rtl' ? 'إحصاءات استخدام الخدمات' : 'Service Usage Analytics'}
+                            </h2>
+                            <p className="text-[10px] text-gray-400 font-bold uppercase mt-0.5">
+                                {dir === 'rtl' ? 'الأكثر استخداماً' : 'Most Used Services'}
+                            </p>
+                        </div>
+                    </div>
+                    <div className="p-6 space-y-4">
+                        {svcUsage.length === 0 ? (
+                            <p className="text-center text-gray-400 text-sm font-bold py-8">
+                                {dir === 'rtl' ? 'لا توجد بيانات' : 'No data yet'}
+                            </p>
+                        ) : svcUsage.map((svc, i) => (
+                            <div key={i}>
+                                <div className="flex justify-between items-center mb-1.5">
+                                    <span className="text-xs font-black text-gray-700 dark:text-gray-300">
+                                        {serviceLabels[svc.service_type] || svc.service_type}
+                                    </span>
+                                    <span className="text-xs font-black text-gray-900 dark:text-white">{svc.count}</span>
+                                </div>
+                                <div className="w-full bg-gray-100 dark:bg-white/5 rounded-full h-2.5 overflow-hidden">
+                                    <div
+                                        className="h-2.5 rounded-full bg-gradient-to-r from-primary-500 to-primary-400 transition-all duration-700"
+                                        style={{ width: `${(svc.count / maxSvc) * 100}%` }}
+                                    />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Revenue Breakdown */}
+                <div className="bg-white dark:bg-primary-900 rounded-2xl shadow-premium border border-gray-200 dark:border-white/5 overflow-hidden">
+                    <div className="p-6 border-b border-gray-100 dark:border-white/5 flex items-center gap-3">
+                        <div className="w-10 h-10 bg-green-600 text-white rounded-xl flex items-center justify-center shadow-md">
+                            <DollarSign size={20} />
+                        </div>
+                        <div>
+                            <h2 className="text-sm font-black text-gray-900 dark:text-white tracking-tight">
+                                {dir === 'rtl' ? 'ملخص الإيرادات' : 'Revenue Summary'}
+                            </h2>
+                            <p className="text-[10px] text-gray-400 font-bold uppercase mt-0.5">
+                                {dir === 'rtl' ? 'من المعاملات المكتملة' : 'From completed transactions'}
+                            </p>
+                        </div>
+                    </div>
+                    <div className="p-6">
+                        <div className="text-center mb-6">
+                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">
+                                {dir === 'rtl' ? 'الإجمالي الكلي' : 'Grand Total'}
+                            </p>
+                            <p className="text-4xl font-black text-gray-900 dark:text-white">{fmt(revenue)}</p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                            {[
+                                { label: dir === 'rtl' ? 'هوية وطنية' : 'National ID', color: 'bg-blue-500', subLabel: dir === 'rtl' ? 'جديدة + تجديد + بدل' : 'New + Renewal + Lost' },
+                                { label: dir === 'rtl' ? 'جواز سفر' : 'Passport', color: 'bg-purple-500', subLabel: dir === 'rtl' ? 'جديد + تجديد + بدل' : 'New + Renewal + Lost' },
+                                { label: dir === 'rtl' ? 'تجديدات' : 'Renewals', color: 'bg-teal-500', subLabel: dir === 'rtl' ? 'هوية + جواز' : 'ID + Passport' },
+                                { label: dir === 'rtl' ? 'استبدالات' : 'Replacements', color: 'bg-amber-500', subLabel: dir === 'rtl' ? 'بدل فاقد' : 'Lost/Damaged' },
+                            ].map((item, i) => (
+                                <div key={i} className="bg-gray-50 dark:bg-white/5 rounded-xl p-4 border border-gray-100 dark:border-white/5">
+                                    <div className={`w-6 h-1 rounded-full ${item.color} mb-2`} />
+                                    <p className="text-[10px] font-black text-gray-900 dark:text-white uppercase">{item.label}</p>
+                                    <p className="text-[9px] text-gray-400 font-bold mt-0.5">{item.subLabel}</p>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="mt-4 pt-4 border-t border-gray-100 dark:border-white/5 text-center">
+                            <p className="text-[10px] text-gray-400 font-bold">
+                                {dir === 'rtl' ? 'يتم التحديث تلقائياً كل دقيقة' : 'Auto-refreshes every 60 seconds'}
+                                {' '}• <span className="text-green-500">●</span>{' '}
+                                {dir === 'rtl' ? 'بيانات حية' : 'Live Data'}
+                            </p>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     );
 };
+
 
 // --- Sub-component: Passport Issuance ---
 const PassportIssuance = () => {
@@ -967,10 +1406,11 @@ const CitizenRegistration = () => {
                                     <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Contact Info</span>
                                     <span className="text-sm font-black font-mono text-gray-900 dark:text-white">{formData.phone}</span>
                                 </div>
-                                <div className="p-4 bg-white dark:bg-black/20 rounded-xl flex justify-between">
+                                <div className="p-4 bg-white dark:bg-black/20 rounded-xl flex justify-between flex-col md:flex-row md:items-center">
                                     <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Address</span>
                                     <span className="text-sm font-black text-gray-900 dark:text-white">{formData.address || 'N/A'}</span>
                                 </div>
+
                             </div>
                             
                             <div className="flex gap-4 pt-4">
@@ -1037,6 +1477,8 @@ const CitizenRegistration = () => {
                                     <input required name="address" value={formData.address} onChange={handleChange} type="text" className="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 p-3.5 rounded-xl font-bold text-sm focus:border-primary-500 outline-none text-gray-900 dark:text-white transition-colors" placeholder="e.g. Maka Al Mukarama St, Hodan, Mogadishu" />
                                 </div>
                             </div>
+
+
 
                             <div className="flex justify-end pt-8">
                                 <button type="submit" disabled={loading} className="w-full md:w-auto bg-primary-600 hover:bg-primary-700 text-white px-10 py-4 rounded-xl font-black text-xs uppercase tracking-[0.2em] transition-all shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3">
@@ -1193,6 +1635,7 @@ const ResidentRegistration = () => {
                                     <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Email</span>
                                     <span className="text-sm font-black text-gray-900 dark:text-white">{formData.email || 'N/A'}</span>
                                 </div>
+
                             </div>
                             
                             <div className="flex gap-4 pt-4">
@@ -1289,6 +1732,8 @@ const ResidentRegistration = () => {
                                     <input required name="address" value={formData.address} onChange={handleChange} type="text" className="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 p-3.5 rounded-xl font-bold text-sm focus:border-primary-500 outline-none text-gray-900 dark:text-white transition-colors" placeholder="Local address..." />
                                 </div>
                             </div>
+
+
 
                             <div className="flex justify-end pt-8">
                                 <button type="submit" disabled={loading} className="w-full md:w-auto bg-primary-600 hover:bg-primary-700 text-white px-10 py-4 rounded-xl font-black text-xs uppercase tracking-[0.2em] transition-all shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3">
@@ -1777,11 +2222,45 @@ const IdentityRenewal = () => {
     const [error, setError] = useState(null);
 
     const [personalPhoto, setPersonalPhoto] = useState('');
+    const [fetchedCitizen, setFetchedCitizen] = useState(null);
     const [step, setStep] = useState(1);
 
-    const handleFormSubmit = (e) => {
-        e.preventDefault();
-        setStep(2);
+    const handleFormSubmit = async (e) => {
+        if (e) e.preventDefault();
+        
+        setLoading(true);
+        setError(null);
+        try {
+            const response = await fetch(`http://localhost:5000/api/admin/search-id?query=${encodeURIComponent(referenceNumber)}`);
+            const data = await response.json();
+            if (data.success && data.results.length > 0) {
+                const citizen = data.results[0];
+                
+                if (!citizen.idCards || citizen.idCards.length === 0) {
+                    setError(dir === 'rtl' ? 'لا يتوفر تجديد الهوية الوطنية لعدم وجود سجل نشط.' : 'National ID renewal is not available because no active National ID record was found.');
+                    setLoading(false);
+                    return;
+                }
+
+                const activeCard = citizen.idCards[0];
+                const now = new Date();
+                const twoYearsFromNow = new Date(now.getFullYear() + 2, now.getMonth(), now.getDate());
+                if (new Date(activeCard.expiry_date) > twoYearsFromNow) {
+                    setError(dir === 'rtl' ? 'يُسمح بتجديد الهوية الوطنية فقط عندما يتبقى أقل من عامين على انتهائها.' : 'National ID renewal is only allowed when the card has less than 2 years remaining before expiration.');
+                    setLoading(false);
+                    return;
+                }
+                
+                setFetchedCitizen(citizen);
+                setStep(2);
+            } else {
+                setError(dir === 'rtl' ? 'لم يتم العثور على بيانات لهذه الهوية.' : 'Could not find data for this ID.');
+            }
+        } catch (err) {
+            setError(dir === 'rtl' ? 'خطأ في الاتصال بالخادم.' : 'Server connection error.');
+        } finally {
+            setLoading(false);
+        }
     };
 
     const confirmSubmit = async () => {
@@ -1842,27 +2321,99 @@ const IdentityRenewal = () => {
                             </div>
                         </div>
                     ) : step === 2 ? (
-                        <div className="space-y-8 animate-fade-in max-w-lg mx-auto border border-gray-200 dark:border-white/5 p-8 rounded-2xl bg-gray-50/50 dark:bg-white/5">
-                            <h3 className="text-xl font-black text-gray-900 dark:text-white mb-4 text-center">Review & Confirm</h3>
+                        <div className="space-y-8 animate-fade-in border border-gray-200 dark:border-white/5 p-8 rounded-2xl bg-gray-50/50 dark:bg-white/5 mx-auto w-fit">
+                            <h3 className="text-xl font-black text-gray-900 dark:text-white mb-4 text-center pb-4 border-b border-gray-200 dark:border-white/10">{dir === 'rtl' ? 'مراجعة بيانات الهوية للبطاقة' : 'Review Identity Data'}</h3>
                             
-                            <div className="space-y-4">
-                                <div className="p-4 bg-white dark:bg-black/20 rounded-xl">
-                                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Reference Number</p>
-                                    <p className="text-lg font-black font-mono text-gray-900 dark:text-white">{referenceNumber}</p>
-                                </div>
-                                <div className="p-4 bg-white dark:bg-black/20 rounded-xl">
-                                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Updated Photo</p>
-                                    {personalPhoto ? (
-                                        <img src={personalPhoto} className="w-32 h-32 object-cover rounded-xl" alt="Preview" />
-                                    ) : (
-                                        <p className="text-sm font-bold text-gray-500">No new photo (will use existing)</p>
-                                    )}
+                            <div className="flex justify-center mb-8 mt-4">
+                                <div dir="ltr" className="relative w-[520px] h-[330px] rounded-2xl overflow-hidden shadow-2xl border border-white/40 group font-sans text-left" style={{ background: fetchedCitizen.type === 'resident' ? 'linear-gradient(135deg, #f1f5f9 0%, #cbd5e1 50%, #94a3b8 100%)' : 'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 50%, #7dd3fc 100%)' }}>
+                                    <div className="absolute inset-0 opacity-10 flex items-center justify-center">
+                                        <Globe size={300} className="text-blue-900" />
+                                    </div>
+                                    <div className="absolute inset-0 p-5 flex flex-col justify-between z-10 text-slate-900">
+                                        <div className="flex justify-between items-start mb-3">
+                                            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/e/eb/Coat_of_arms_of_Somalia.svg/200px-Coat_of_arms_of_Somalia.svg.png" alt="Coat of Arms" className="w-14 h-auto drop-shadow-md" />
+                                            <div className="text-center flex-1 mx-2 mt-1">
+                                                <h3 className="text-[10px] font-bold text-slate-800 leading-tight">Jamhuuriyadda Federaalka Soomaaliya</h3>
+                                                <h3 className="text-[12px] font-black text-slate-900 leading-tight my-0.5" dir="rtl">جمهورية الصومال الفيدرالية</h3>
+                                                <h3 className="text-[10px] font-bold text-slate-800 leading-tight">Federal Republic of Somalia</h3>
+                                                <h4 className="text-[8px] font-bold text-slate-700 leading-tight mt-1.5">Kaarka Aqoonsiga</h4>
+                                                <h4 className="text-[9px] font-black text-slate-900 leading-tight">IDENTITY CARD / <span dir="rtl" className="font-bold">بطاقة الهوية</span></h4>
+                                            </div>
+                                            <div className="w-14 h-9 bg-blue-500 border border-white/50 shadow-sm flex items-center justify-center relative mt-2">
+                                                <div className="text-white">
+                                                    <svg width="16" height="16" viewBox="0 0 512 512"><path fill="#fff" d="M256 16l61.8 190.2h200L356.1 323.8 417.9 514 256 396.2 94.1 514l61.8-190.2L-4.2 206.2h200z" /></svg>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-4 flex-1 flex-row-reverse">
+                                            <div className="flex-1 space-y-2 flex flex-col justify-between">
+                                                <div className="flex justify-between w-full">
+                                                    <div className="w-[45%]">
+                                                        <p className="text-[8px] font-bold text-slate-600 leading-none">Lambarka aqoonsiga <span dir="rtl">رقم الهوية /</span> Identity Number</p>
+                                                        <p className="text-xs font-black text-slate-900 font-mono tracking-wider mt-0.5">{fetchedCitizen.id_number}</p>
+                                                    </div>
+                                                    <div className="w-[50%] border-l border-slate-400/30 pl-3">
+                                                        <p className="text-[8px] font-bold text-slate-600 leading-none mb-1">Tirada <span dir="rtl">رقم الإصدار /</span> Issue No.</p>
+                                                        <span className="bg-slate-300 text-slate-900 text-xs font-black font-mono px-2 py-0.5 rounded shadow-sm border border-slate-400/50">
+                                                            {fetchedCitizen.idCards[0]?.issue_number || 1}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <p className="text-[8px] font-bold text-slate-600 leading-none">Magaca <span dir="rtl">الاسم /</span> Name</p>
+                                                    <p className="text-xs font-black text-slate-900 uppercase mt-0.5">{fetchedCitizen.full_name}</p>
+                                                </div>
+                                                <div className="flex justify-between w-full">
+                                                    <div className="w-[45%]">
+                                                        <p className="text-[8px] font-bold text-slate-600 leading-none">Jinsiga <span dir="rtl">الجنس /</span> Sex</p>
+                                                        <p className="text-xs font-black text-slate-900 uppercase mt-0.5">{fetchedCitizen.gender}</p>
+                                                    </div>
+                                                    <div className="w-[50%] border-l border-slate-400/30 pl-3">
+                                                        <p className="text-[8px] font-bold text-slate-600 leading-none">Taariikhda Dhalashada <span dir="rtl">الميلاد /</span> Date of Birth</p>
+                                                        <p className="text-xs font-black text-slate-900 font-mono mt-0.5">{new Date(fetchedCitizen.dob).toLocaleDateString('en-GB').replace(/\//g, '-')}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex justify-between w-full pt-1.5 border-t border-slate-400/30">
+                                                    <div className="w-[45%]">
+                                                        <p className="text-[8px] font-bold text-slate-600 leading-none">Taariikhda la bixiyey <span dir="rtl">الإصدار /</span> Date of Issue</p>
+                                                        <p className="text-xs font-black text-slate-900 font-mono mt-0.5">{fetchedCitizen.idCards[0] ? new Date(fetchedCitizen.idCards[0].issue_date).toLocaleDateString('en-GB').replace(/\//g, '-') : 'N/A'}</p>
+                                                    </div>
+                                                    <div className="w-[50%] border-l border-slate-400/30 pl-3">
+                                                        <p className="text-[8px] font-bold text-slate-600 leading-none">Taariikhda uu dhacayo <span dir="rtl">انتهاء /</span> Date of Expiry</p>
+                                                        <p className="text-xs font-black text-slate-900 font-mono mt-0.5">{fetchedCitizen.idCards[0] ? new Date(fetchedCitizen.idCards[0].expiry_date).toLocaleDateString('en-GB').replace(/\//g, '-') : 'N/A'}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-end justify-between pt-1">
+                                                    <div className="flex flex-col items-center">
+                                                        <div className="w-8 h-10 border border-slate-300 rounded overflow-hidden opacity-60 relative mix-blend-multiply mb-0.5">
+                                                            <img src={(personalPhoto || fetchedCitizen.photo) || "https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=150"} className="w-full h-full object-cover grayscale" alt="Hologram" />
+                                                            <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/40 to-transparent"></div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="w-28 flex flex-col items-center justify-between mt-1">
+                                                <div className="w-[100px] h-[130px] bg-slate-200 border border-slate-300 shadow-inner overflow-hidden rounded-sm">
+                                                    <img src={(personalPhoto || fetchedCitizen.photo) || "https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=300"} className="w-full h-full object-cover grayscale" alt="Profile" />
+                                                </div>
+                                                <div className="text-center w-full mt-auto pb-1 relative z-20">
+                                                    <div className="font-['Brush_Script_MT',cursive] text-xl text-slate-800 -rotate-3 mb-0.5">Holder</div>
+                                                    <p className="text-[7px] font-bold text-slate-600 border-t border-slate-400/50 pt-1">Holder's Signature</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="absolute inset-0 bg-gradient-to-br from-white/40 via-transparent to-black/5 z-20 pointer-events-none mix-blend-overlay"></div>
                                 </div>
                             </div>
                             
-                            <div className="flex gap-4 pt-4">
-                                <button onClick={() => setStep(1)} type="button" className="flex-1 bg-gray-200 dark:bg-white/10 hover:bg-gray-300 dark:hover:bg-white/20 text-gray-900 dark:text-white px-6 py-4 rounded-xl font-black text-sm uppercase tracking-widest transition-all">Edit Details</button>
-                                <button onClick={confirmSubmit} disabled={loading} type="button" className="flex-1 bg-primary-600 hover:bg-primary-700 text-white px-6 py-4 rounded-xl font-black text-sm uppercase tracking-widest transition-all">{loading ? 'Processing...' : 'Confirm'}</button>
+                            <div className="flex justify-center gap-4 pt-4 mt-6 border-t border-gray-200 dark:border-white/10">
+                                <button onClick={() => setStep(1)} type="button" className="px-8 py-4 bg-gray-200 dark:bg-white/10 hover:bg-gray-300 dark:hover:bg-white/20 text-gray-900 dark:text-white rounded-xl font-black text-sm uppercase tracking-widest transition-all">
+                                    {dir === 'rtl' ? 'رجوع' : 'Back'}
+                                </button>
+                                <button onClick={confirmSubmit} disabled={loading} type="button" className="px-10 py-4 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-black text-sm uppercase tracking-widest transition-all shadow-md">
+                                    {loading ? (dir === 'rtl' ? 'جاري التنفيذ...' : 'Processing...') : (dir === 'rtl' ? 'تأكيد وتجديد' : 'Confirm & Renew')}
+                                </button>
                             </div>
                         </div>
                     ) : (
@@ -2371,6 +2922,264 @@ const PassportSearch = () => {
     );
 };
 
+// --- Sub-component: Print Identity ---
+const PrintIdentity = () => {
+    const { dir } = useLanguage();
+    const [query, setQuery] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
+    const [selectedResult, setSelectedResult] = useState(null);
+
+    const handlePrint = async () => {
+        try {
+            const admin = JSON.parse(localStorage.getItem('user') || '{}');
+            await fetch('http://localhost:5000/api/admin/print-log', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    admin_name: admin.full_name || admin.username || 'Admin',
+                    document_type: 'National ID',
+                    document_number: selectedResult.id_number,
+                    timestamp: new Date().toISOString()
+                })
+            });
+        } catch (e) { console.error('Failed to log print action', e); }
+        window.print();
+    };
+
+    const handleSearch = async (e) => {
+        e.preventDefault();
+        setLoading(true); setError(null); setSelectedResult(null);
+        try {
+            const response = await fetch(`http://localhost:5000/api/admin/search-id?query=${encodeURIComponent(query)}`);
+            const data = await response.json();
+            if (data.success && data.results.length > 0) {
+                const citizen = data.results[0];
+                if (!citizen.idCards || citizen.idCards.length === 0) {
+                    setError('No ID Card issued for this citizen.');
+                } else setSelectedResult(citizen);
+            } else { setError('No identities found.'); }
+        } catch (err) { setError('Server connection error.'); } finally { setLoading(false); }
+    };
+
+    return (
+        <div className="max-w-6xl mx-auto space-y-8 animate-fade-in-up print-container">
+            <style>{`
+                @media print {
+                    body * { visibility: hidden; }
+                    .print-area, .print-area * { visibility: visible; }
+                    .print-area { position: absolute !important; left: 0 !important; top: 0 !important; margin: 0 !important; padding: 20px !important; width: 100% !important; }
+                    aside, header, button { display: none !important; }
+                    main { overflow: visible !important; }
+                    @page { size: auto; margin: 0mm; }
+                }
+            `}</style>
+            
+            <div className="bg-white dark:bg-primary-900 p-8 md:p-12 rounded-[2rem] shadow-premium border border-gray-200 dark:border-white/5 print:shadow-none print:border-none print:p-0 print:bg-transparent">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12 pb-8 border-b border-gray-100 dark:border-white/5 print:hidden">
+                    <div className="flex items-center gap-6">
+                        <div className="w-16 h-16 bg-primary-600 text-white rounded-2xl flex items-center justify-center shadow-lg"><Printer size={32} /></div>
+                        <div>
+                            <h2 className="text-2xl font-black text-gray-900 dark:text-white">{dir === 'rtl' ? 'طباعة الهوية' : 'Print National ID'}</h2>
+                            <p className="text-[10px] text-gray-500 font-black uppercase tracking-[0.2em] mt-2">Generate ID Card Copy</p>
+                        </div>
+                    </div>
+                </div>
+
+                {selectedResult ? (
+                    <div className="space-y-6">
+                        <div className="flex justify-between items-center print:hidden">
+                            <button onClick={() => setSelectedResult(null)} className="px-5 py-2.5 bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-gray-300 rounded-xl font-bold text-xs uppercase">Back to Search</button>
+                            <button onClick={handlePrint} className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-sm uppercase shadow-xl flex gap-2 items-center"><Printer size={18} /> Print ID Card</button>
+                        </div>
+                        
+                        <div className="flex justify-center my-8 print-area">
+                            <div dir="ltr" className="relative w-[520px] h-[330px] rounded-2xl overflow-hidden shadow-2xl border border-white/40 group font-sans text-left" style={{ background: selectedResult.type === 'resident' ? 'linear-gradient(135deg, #f1f5f9 0%, #cbd5e1 50%, #94a3b8 100%)' : 'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 50%, #7dd3fc 100%)', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                                <div className="absolute inset-0 opacity-10 flex items-center justify-center"><Globe size={300} className="text-blue-900" /></div>
+                                <div className="absolute inset-0 p-5 flex flex-col justify-between z-10 text-slate-900">
+                                    <div className="flex justify-between items-start mb-3">
+                                        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/e/eb/Coat_of_arms_of_Somalia.svg/200px-Coat_of_arms_of_Somalia.svg.png" alt="Coat of Arms" className="w-14 h-auto drop-shadow-md" />
+                                        <div className="text-center flex-1 mx-2 mt-1">
+                                            <h3 className="text-[10px] font-bold text-slate-800 leading-tight">Jamhuuriyadda Federaalka Soomaaliya</h3>
+                                            <h3 className="text-[12px] font-black text-slate-900 leading-tight my-0.5" dir="rtl">جمهورية الصومال الفيدرالية</h3>
+                                            <h3 className="text-[10px] font-bold text-slate-800 leading-tight">Federal Republic of Somalia</h3>
+                                            <h4 className="text-[8px] font-bold text-slate-700 leading-tight mt-1.5">Kaarka Aqoonsiga</h4>
+                                            <h4 className="text-[9px] font-black text-slate-900 leading-tight">IDENTITY CARD / <span dir="rtl" className="font-bold">بطاقة الهوية</span></h4>
+                                        </div>
+                                        <div className="w-14 h-9 bg-blue-500 border border-white/50 shadow-sm flex items-center justify-center relative mt-2"><div className="text-white"><svg width="16" height="16" viewBox="0 0 512 512"><path fill="#fff" d="M256 16l61.8 190.2h200L356.1 323.8 417.9 514 256 396.2 94.1 514l61.8-190.2L-4.2 206.2h200z" /></svg></div></div>
+                                    </div>
+                                    <div className="flex gap-4 flex-1 flex-row-reverse">
+                                        <div className="flex-1 space-y-2 flex flex-col justify-between">
+                                            <div className="flex justify-between w-full">
+                                                <div className="w-[45%]"><p className="text-[8px] font-bold text-slate-600 leading-none">Lambarka/ID Number</p><p className="text-xs font-black text-slate-900 font-mono tracking-wider mt-0.5">{selectedResult.id_number}</p></div>
+                                                <div className="w-[50%] border-l border-slate-400/30 pl-3"><p className="text-[8px] font-bold text-slate-600 leading-none mb-1">Issue No.</p><span className="bg-slate-300 text-slate-900 text-xs font-black font-mono px-2 py-0.5 rounded shadow-sm border border-slate-400/50">{selectedResult.idCards[0]?.issue_number || 1}</span></div>
+                                            </div>
+                                            <div><p className="text-[8px] font-bold text-slate-600 leading-none">Magaca/Name</p><p className="text-xs font-black text-slate-900 uppercase mt-0.5">{selectedResult.full_name}</p></div>
+                                            <div className="flex justify-between w-full">
+                                                <div className="w-[45%]"><p className="text-[8px] font-bold text-slate-600 leading-none">Sex</p><p className="text-xs font-black text-slate-900 uppercase mt-0.5">{selectedResult.gender}</p></div>
+                                                <div className="w-[50%] border-l border-slate-400/30 pl-3"><p className="text-[8px] font-bold text-slate-600 leading-none">Date of Birth</p><p className="text-xs font-black text-slate-900 font-mono mt-0.5">{new Date(selectedResult.dob).toLocaleDateString('en-GB').replace(/\//g, '-')}</p></div>
+                                            </div>
+                                            <div className="flex justify-between w-full pt-1.5 border-t border-slate-400/30">
+                                                <div className="w-[45%]"><p className="text-[8px] font-bold text-slate-600 leading-none">Date of Issue</p><p className="text-xs font-black text-slate-900 font-mono mt-0.5">{selectedResult.idCards[0] ? new Date(selectedResult.idCards[0].issue_date).toLocaleDateString('en-GB').replace(/\//g, '-') : 'N/A'}</p></div>
+                                                <div className="w-[50%] border-l border-slate-400/30 pl-3"><p className="text-[8px] font-bold text-slate-600 leading-none">Date of Expiry</p><p className="text-xs font-black text-slate-900 font-mono mt-0.5">{selectedResult.idCards[0] ? new Date(selectedResult.idCards[0].expiry_date).toLocaleDateString('en-GB').replace(/\//g, '-') : 'N/A'}</p></div>
+                                            </div>
+                                            <div className="flex items-end justify-between pt-1">
+                                                <div className="flex flex-col items-center"><div className="w-8 h-10 border border-slate-300 rounded overflow-hidden opacity-60 relative mix-blend-multiply mb-0.5"><img src={selectedResult.photo || "https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=150"} className="w-full h-full object-cover grayscale" alt="Hologram" /><div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/40 to-transparent"></div></div></div>
+                                            </div>
+                                        </div>
+                                        <div className="w-28 flex flex-col items-center justify-between mt-1">
+                                            <div className="w-[100px] h-[130px] bg-slate-200 border border-slate-300 shadow-inner overflow-hidden rounded-sm"><img src={selectedResult.photo || "https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=300"} className="w-full h-full object-cover grayscale" alt="Profile" /></div>
+                                            <div className="text-center w-full mt-auto pb-1 relative z-20"><div className="font-['Brush_Script_MT',cursive] text-xl text-slate-800 -rotate-3 mb-0.5">Holder</div><p className="text-[7px] font-bold text-slate-600 border-t border-slate-400/50 pt-1">Holder's Signature</p></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="absolute inset-0 bg-gradient-to-br from-white/40 via-transparent to-black/5 z-20 pointer-events-none mix-blend-overlay"></div>
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="print:hidden animate-fade-in">
+                        <form onSubmit={handleSearch} className="mb-8 flex gap-4">
+                            <input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search ID by name or numbers..." className="flex-1 bg-gray-50 dark:bg-black/20 border-2 border-primary-200 p-4 rounded-xl font-bold outline-none text-gray-900 dark:text-white" />
+                            <button type="submit" disabled={loading || !query} className="bg-primary-600 hover:bg-primary-700 text-white px-8 rounded-xl font-black uppercase text-sm">{loading ? 'Searching...' : 'Search'}</button>
+                        </form>
+                        {error && <div className="p-4 bg-red-50 text-red-600 rounded-xl text-xs font-bold"><AlertCircle size={16} className="inline mr-2" />{error}</div>}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+// --- Sub-component: Print Passport ---
+const PrintPassport = () => {
+    const { dir } = useLanguage();
+    const [query, setQuery] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
+    const [selectedResult, setSelectedResult] = useState(null);
+
+    const handlePrint = async () => {
+        try {
+            const admin = JSON.parse(localStorage.getItem('user') || '{}');
+            await fetch('http://localhost:5000/api/admin/print-log', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    admin_name: admin.full_name || admin.username || 'Admin',
+                    document_type: 'Passport',
+                    document_number: selectedResult.passport_number,
+                    timestamp: new Date().toISOString()
+                })
+            });
+        } catch (e) { console.error('Failed to log print action', e); }
+        window.print();
+    };
+
+    const handleSearch = async (e) => {
+        e.preventDefault();
+        setLoading(true); setError(null); setSelectedResult(null);
+        try {
+            const response = await fetch(`http://localhost:5000/api/admin/search-passport?query=${encodeURIComponent(query)}`);
+            const data = await response.json();
+            if (data.success && data.results.length > 0) {
+                const resultsWithPassport = data.results.filter(r => r._hasPassport);
+                if (resultsWithPassport.length > 0) setSelectedResult(resultsWithPassport[0]);
+                else setError('No Passport has been issued for this citizen.');
+            } else { setError('No passports found.'); }
+        } catch (err) { setError('Server connection error.'); } finally { setLoading(false); }
+    };
+
+    return (
+        <div className="max-w-6xl mx-auto space-y-8 animate-fade-in-up print-container">
+            <style>{`
+                @media print {
+                    body * { visibility: hidden; }
+                    .print-area, .print-area * { visibility: visible; }
+                    .print-area { position: absolute !important; left: 0 !important; top: 0 !important; margin: 0 !important; padding: 20px !important; width: 100% !important; }
+                    aside, header, button { display: none !important; }
+                    main { overflow: visible !important; }
+                    @page { size: auto; margin: 0mm; }
+                }
+            `}</style>
+            
+            <div className="bg-white dark:bg-primary-900 p-8 md:p-12 rounded-[2rem] shadow-premium border border-gray-200 dark:border-white/5 print:shadow-none print:border-none print:p-0 print:bg-transparent">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12 pb-8 border-b border-gray-100 dark:border-white/5 print:hidden">
+                    <div className="flex items-center gap-6">
+                        <div className="w-16 h-16 bg-blue-600 text-white rounded-2xl flex items-center justify-center shadow-lg"><BookOpen size={32} /></div>
+                        <div>
+                            <h2 className="text-2xl font-black text-gray-900 dark:text-white">{dir === 'rtl' ? 'طباعة الجواز' : 'Print Passport'}</h2>
+                            <p className="text-[10px] text-gray-500 font-black uppercase tracking-[0.2em] mt-2">Generate Passport Copy</p>
+                        </div>
+                    </div>
+                </div>
+
+                {selectedResult ? (
+                    <div className="space-y-6">
+                        <div className="flex justify-between items-center print:hidden">
+                            <button onClick={() => setSelectedResult(null)} className="px-5 py-2.5 bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-gray-300 rounded-xl font-bold text-xs uppercase">Back to Search</button>
+                            <button onClick={handlePrint} className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-sm uppercase shadow-xl flex gap-2 items-center"><Printer size={18} /> Print Passport</button>
+                        </div>
+                        
+                        <div className="flex justify-center my-8 print-area">
+                            <div className="w-[800px] h-[540px] bg-white border-x-4 border-slate-300 shadow-xl overflow-hidden relative flex flex-col font-sans mb-4 print:shadow-none print:border-none" style={{ backgroundImage: 'radial-gradient(circle at center, #fdfdfd 0%, #f0ebd8 100%)', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                                <div className="absolute inset-0 opacity-10 flex items-center justify-center -z-1 pointer-events-none"><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/e/eb/Coat_of_arms_of_Somalia.svg/400px-Coat_of_arms_of_Somalia.svg.png" className="w-[300px] h-auto opacity-40 mix-blend-multiply" alt="Watermark" /></div>
+                                
+                                <div className="flex justify-between items-center px-8 pt-6 pb-2 border-b border-gray-300/60 shrink-0">
+                                    <div className="text-center w-64"><h2 className="text-lg font-black tracking-widest text-[#1e3a8a] whitespace-nowrap">JAMHUURIYADDA SOOMAALIYA</h2><div className="flex items-center justify-between text-[#1e3a8a] font-black text-sm mt-1"><span>BAASABOOR</span><span className="font-normal mx-2 text-gray-500">|</span><span dir="rtl" className="text-base leading-none">جواز سفر</span><span className="font-normal mx-2 text-gray-500">|</span><span>PASSPORT</span></div></div>
+                                    <div className="mx-4 mt-2"><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/e/eb/Coat_of_arms_of_Somalia.svg/200px-Coat_of_arms_of_Somalia.svg.png" className="w-16 h-auto drop-shadow-md" alt="Somalia" /></div>
+                                    <div className="text-center w-64"><h2 dir="rtl" className="text-2xl font-black text-[#1e3a8a] mb-2 leading-none">جمهورية الصومال</h2><h2 className="text-lg font-black tracking-widest text-[#1e3a8a] whitespace-nowrap">SOMALI REPUBLIC</h2></div>
+                                </div>
+
+                                <div className="flex flex-1 px-8 py-4 gap-8">
+                                    <div className="w-[180px] shrink-0"><div className="w-full h-[240px] bg-white border border-gray-300 p-1 shadow-sm mb-4"><img src={selectedResult.citizen?.photo || "https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=300"} className="w-full h-full object-cover" alt="Holder" /></div></div>
+                                    <div className="flex-1 text-[#1e3a8a]">
+                                        <div className="flex gap-4 mb-2 pb-2">
+                                            <div className="w-1/4"><p className="text-[10px] font-bold text-gray-600">Type / <span dir="rtl">النوع</span></p><p className="text-lg font-bold font-mono text-black">{selectedResult.type === 'regular' ? 'P' : 'D'}</p></div>
+                                            <div className="w-1/4"><p className="text-[10px] font-bold text-gray-600">Code / <span dir="rtl">الرمز</span></p><p className="text-lg font-bold font-mono text-black">SOM</p></div>
+                                            <div className="flex-1 mt-1 text-right border-l-2 border-gray-300 pl-4"><p className="text-[10px] font-bold text-gray-600">Passport No / <span dir="rtl">رقم الجواز</span></p><p className="text-2xl font-black font-mono tracking-widest text-black">{selectedResult.passport_number}</p></div>
+                                        </div>
+                                        <div className="space-y-3 mt-4">
+                                            <div><p className="text-[10px] font-bold text-gray-600">Name / <span dir="rtl">الاسم</span></p><p className="text-lg font-black uppercase text-black">{selectedResult.citizen?.full_name}</p></div>
+                                            <div className="flex justify-between border-t border-gray-300/50 pt-2"><div className="w-1/2"><p className="text-[10px] font-bold text-gray-600">Nationality / <span dir="rtl">الجنسية</span></p><p className="text-sm font-black uppercase text-black">{selectedResult.citizen?.nationality || 'SOMALI'}</p></div><div className="w-1/2"><p className="text-[10px] font-bold text-gray-600">Occupation / <span dir="rtl">المهنة</span></p><p className="text-sm font-black uppercase text-black"></p></div></div>
+                                            <div className="flex justify-between border-t border-gray-300/50 pt-2">
+                                                <div className="w-1/3"><p className="text-[10px] font-bold text-gray-600 leading-tight">Date of Birth</p><p className="text-base font-black font-mono text-black mt-1">{new Date(selectedResult.citizen?.dob).toISOString().split('T')[0]}</p></div>
+                                                <div className="w-1/3 text-center"><p className="text-[10px] font-bold text-gray-600 leading-tight">Gender</p><p className="text-base font-black font-mono text-black mt-1">{selectedResult.citizen?.gender.charAt(0).toUpperCase()}</p></div>
+                                                <div className="w-1/3 text-right"><p className="text-[10px] font-bold text-gray-600 leading-tight">Place of Birth</p><p className="text-sm font-black uppercase text-black mt-1">SOMALIA</p></div>
+                                            </div>
+                                            <div className="flex justify-between border-t border-gray-300/50 pt-2">
+                                                <div className="w-1/3"><p className="text-[10px] font-bold text-gray-600 leading-tight">Date of Issue</p><p className="text-base font-black font-mono text-black mt-1">{new Date(selectedResult.issue_date).toISOString().split('T')[0]}</p></div>
+                                                <div className="w-1/3 text-center"><p className="text-[10px] font-bold text-gray-600 leading-tight">Authority</p><p className="text-sm font-black uppercase text-black mt-1">Immigration HQ</p></div>
+                                                <div className="w-1/3 text-right"><p className="text-[10px] font-bold text-gray-600 leading-tight">Place of Issue</p><p className="text-sm font-black uppercase text-black mt-1">MOGADISHU</p></div>
+                                            </div>
+                                            <div className="flex justify-between border-t border-gray-300/50 pt-2">
+                                                <div className="w-1/3"><p className="text-[10px] font-bold text-gray-600 leading-tight">Date of expiry</p><p className="text-base font-black font-mono text-black mt-1">{new Date(selectedResult.expiry_date).toISOString().split('T')[0]}</p></div>
+                                                <div className="w-2/3 text-right pt-2 border-t-0"><p className="text-[10px] font-bold text-gray-600 border-t border-gray-400 inline-block pt-1 ml-auto relative"><span className="absolute bottom-4 right-0 font-['Brush_Script_MT',cursive] text-2xl opacity-80 text-black -rotate-6 whitespace-nowrap">Holder's Signature</span>Saxiixa qofka leh / Holder's Signature</p></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="mt-auto h-16 bg-white shrink-0 px-6 py-2 border-t font-['OCR_A_Std','Courier_New',monospace] text-black font-black tracking-[0.2em] text-[15px] flex flex-col justify-center leading-tight z-10">
+                                    <p>P&lt;SOM{selectedResult.citizen?.full_name.split(' ')[0].toUpperCase()}&lt;&lt;{selectedResult.citizen?.full_name.split(' ').slice(1).join('<').toUpperCase()}&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;</p>
+                                    <p>{selectedResult.passport_number}&lt;3SOM{new Date(selectedResult.citizen?.dob).toISOString().split('T')[0].replace(/-/g, '').slice(2)}M{new Date(selectedResult.expiry_date).toISOString().split('T')[0].replace(/-/g, '').slice(2)}&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;02</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="print:hidden animate-fade-in">
+                        <form onSubmit={handleSearch} className="mb-8 flex gap-4">
+                            <input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search Passport by Number, ID or Name..." className="flex-1 bg-gray-50 dark:bg-black/20 border-2 border-blue-200 p-4 rounded-xl font-bold outline-none text-gray-900 dark:text-white" />
+                            <button type="submit" disabled={loading || !query} className="bg-blue-600 hover:bg-blue-700 text-white px-8 rounded-xl font-black uppercase text-sm">{loading ? 'Searching...' : 'Search'}</button>
+                        </form>
+                        {error && <div className="p-4 bg-red-50 text-red-600 rounded-xl text-xs font-bold"><AlertCircle size={16} className="inline mr-2" />{error}</div>}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
 // --- Sub-component: AdminProfile ---
 const AdminProfile = () => {
     const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
@@ -2462,18 +3271,694 @@ const AdminProfile = () => {
     );
 };
 
+// --- Sub-component: PrintingQueue ---
+const PrintingQueue = () => {
+    const { t, dir } = useLanguage();
+    const [queue, setQueue] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [confirmModal, setConfirmModal] = useState(null);
+    const [filterStatus, setFilterStatus] = useState('pending');
+
+    const fetchQueue = async () => {
+        try {
+            const res = await fetch('http://localhost:5000/api/admin/print-queue-all');
+            const data = await res.json();
+            if (data.success) setQueue(data.queue);
+        } catch (error) {
+            console.error('Failed to fetch queue', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchQueue();
+    }, []);
+
+    const markPrinted = async (id) => {
+        try {
+            const admin = JSON.parse(localStorage.getItem('user') || '{}');
+            await fetch(`http://localhost:5000/api/admin/mark-printed/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ printedBy: admin.fullName || admin.username })
+            });
+            fetchQueue();
+            setConfirmModal(null);
+        } catch (error) {
+            console.error('Action failed');
+        }
+    };
+
+    const filteredQueue = queue.filter(item => filterStatus === 'all' ? true : item.status === filterStatus);
+
+    return (
+        <div className="max-w-7xl mx-auto space-y-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <h2 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-widest">{dir === 'rtl' ? 'طابور الطباعة' : 'Printing Queue'}</h2>
+                <div className="flex gap-2 p-1 bg-gray-100 dark:bg-white/5 rounded-xl border border-gray-200 dark:border-white/10 shrink-0">
+                    {['all', 'pending', 'printed'].map(f => (
+                        <button key={f} onClick={() => setFilterStatus(f)}
+                            className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${filterStatus === f ? 'bg-white dark:bg-primary-600 text-primary-900 dark:text-white shadow-sm' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/10'}`}>
+                            {f === 'all' ? 'All' : f === 'pending' ? 'Pending' : 'Printed'}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            <div className="bg-white dark:bg-[#020617] border border-gray-200 dark:border-white/5 rounded-2xl p-6 shadow-sm overflow-hidden">
+                {loading ? <p>Loading...</p> : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left font-bold text-sm text-gray-700 dark:text-gray-300">
+                            <thead className="text-gray-400 border-b border-gray-100 dark:border-white/5 uppercase text-[10px] tracking-widest whitespace-nowrap">
+                                <tr>
+                                    <th className="pb-4 px-2">Applicant Name</th>
+                                    <th className="pb-4 px-2">National ID Number</th>
+                                    <th className="pb-4 px-2">Request Type</th>
+                                    <th className="pb-4 px-2">Document Type</th>
+                                    <th className="pb-4 px-2">Request #</th>
+                                    <th className="pb-4 px-2">Approval Date</th>
+                                    <th className="pb-4 px-2">Status</th>
+                                    <th className="pb-4 px-2 font-mono">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filteredQueue.map(item => {
+                                    let reqType = 'Issuance';
+                                    if (item.document_type?.includes('Replacement')) reqType = 'Replacement';
+                                    else if (item.document_type?.includes('Renewal') || item.document_type?.includes('Re-issue')) reqType = 'Renewal';
+
+                                    return (
+                                    <tr key={item.print_id} className="border-b border-gray-100 dark:border-white/5 last:border-0 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors text-xs whitespace-nowrap">
+                                        <td className="py-4 px-2">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-6 h-6 rounded bg-primary-100 dark:bg-white/5 text-primary-700 dark:text-gold-400 flex items-center justify-center font-black text-[9px] uppercase">{item.applicant_name?.substring(0, 2) || '?'}</div>
+                                                <span className="font-bold text-gray-900 dark:text-white">{item.applicant_name}</span>
+                                            </div>
+                                        </td>
+                                        <td className="py-4 px-2 font-mono text-primary-700 dark:text-gold-400">{item.document_number}</td>
+                                        <td className="py-4 px-2">
+                                            <span className="bg-gray-100 dark:bg-white/5 px-2 py-1 rounded text-[10px] uppercase text-gray-600 dark:text-gray-400">{reqType}</span>
+                                        </td>
+                                        <td className="py-4 px-2">
+                                            <span className="font-bold uppercase tracking-wider text-[10px]">{item.document_type}</span>
+                                        </td>
+                                        <td className="py-4 px-2 font-mono text-gray-500">#{item.request_number}</td>
+                                        <td className="py-4 px-2 text-gray-500">{new Date(item.request_date).toLocaleDateString()}</td>
+                                        <td className="py-4 px-2">
+                                            <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[9px] font-black uppercase ${
+                                                item.status === 'pending' ? 'bg-amber-50 border-amber-100 text-amber-700 dark:bg-amber-500/10 dark:border-amber-500/20 dark:text-amber-400' 
+                                                : 'bg-green-50 border-green-100 text-green-700 dark:bg-green-500/10 dark:border-green-500/20 dark:text-green-400'
+                                            }`}>
+                                                <span className={`w-1.5 h-1.5 rounded-full ${item.status === 'pending' ? 'bg-amber-500 animate-pulse' : 'bg-green-500'}`}></span>
+                                                {item.status}
+                                            </span>
+                                        </td>
+                                        <td className="py-4 px-2">
+                                            {item.status === 'pending' ? (
+                                                <button onClick={() => setConfirmModal(item.print_id)} className="bg-primary-600 hover:bg-primary-700 text-white px-3 py-1.5 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all shadow-sm">Mark Printed</button>
+                                            ) : (
+                                                <span className="text-[10px] font-black uppercase text-gray-400">Printed</span>
+                                            )}
+                                        </td>
+                                    </tr>
+                                )})}
+                                {filteredQueue.length === 0 && <tr><td colSpan="8" className="py-8 text-center text-gray-500 font-bold">No {filterStatus === 'all' ? '' : filterStatus} printing requests found.</td></tr>}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+
+            {confirmModal && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center animate-fade-in">
+                    <div className="bg-white dark:bg-primary-900 p-8 rounded-2xl shadow-premium border border-gray-200 dark:border-white/10 max-w-sm w-full relative">
+                        <div className="w-16 h-16 bg-primary-100 dark:bg-primary-500/20 rounded-2xl flex items-center justify-center mx-auto mb-6 text-primary-600">
+                            <Printer size={32} />
+                        </div>
+                        <h3 className="text-xl font-black text-gray-900 dark:text-white uppercase mb-4 text-center">Confirm Printing</h3>
+                        <p className="text-sm font-bold text-gray-500 mb-8 text-center">Are you sure you want to mark this document as printed? This action cannot be undone.</p>
+                        <div className="flex gap-4">
+                            <button onClick={() => setConfirmModal(null)} className="flex-1 px-4 py-3 bg-gray-200 dark:bg-white/10 hover:bg-gray-300 dark:hover:bg-white/20 text-gray-900 dark:text-white rounded-xl font-black text-xs uppercase">Cancel</button>
+                            <button onClick={() => markPrinted(confirmModal)} className="flex-1 px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-black text-xs uppercase shadow-md">Confirm</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+// --- Sub-component: PrintingHistory ---
+const PrintingHistory = () => {
+    const { t, dir } = useLanguage();
+    const [history, setHistory] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    const fetchHistory = async () => {
+        try {
+            const res = await fetch('http://localhost:5000/api/admin/print-history');
+            const data = await res.json();
+            if (data.success) setHistory(data.history);
+        } catch (error) {
+            console.error('Failed to fetch history', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchHistory();
+    }, []);
+
+    return (
+        <div className="max-w-7xl mx-auto space-y-6">
+            <h2 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-widest">{dir === 'rtl' ? 'سجل الطباعة' : 'Printing History'}</h2>
+            <div className="bg-white dark:bg-[#020617] border border-gray-200 dark:border-white/5 rounded-2xl p-6 shadow-sm overflow-hidden text-left font-bold text-sm text-gray-700 dark:text-gray-300">
+                {loading ? <p>Loading...</p> : (
+                    <table className="w-full">
+                        <thead className="text-gray-400 border-b border-gray-100 dark:border-white/5">
+                            <tr>
+                                <th className="pb-4">Applicant Name</th>
+                                <th className="pb-4">Document Details</th>
+                                <th className="pb-4">Printed By</th>
+                                <th className="pb-4">Date/Time</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {history.map(item => (
+                                <tr key={item.print_id} className="border-b border-gray-100 dark:border-white/5 last:border-0 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                                    <td className="py-4">{item.applicant_name}</td>
+                                    <td className="py-4">
+                                        <p className="uppercase">{item.document_type}</p>
+                                        <p className="font-mono text-xs text-gray-500">#{item.document_number}</p>
+                                    </td>
+                                    <td className="py-4 text-xs">{item.printed_by}</td>
+                                    <td className="py-4 text-xs font-mono">{new Date(item.print_date).toLocaleDateString()} {item.print_time}</td>
+                                </tr>
+                            ))}
+                            {history.length === 0 && <tr><td colSpan="4" className="py-8 text-center">No printing history found.</td></tr>}
+                        </tbody>
+                    </table>
+                )}
+            </div>
+        </div>
+    );
+};
+
+// --- Sub-component: UserManagement ---
+const UserManagement = () => {
+    const { t, dir } = useLanguage();
+    const [users, setUsers] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [editUser, setEditUser] = useState(null);
+
+    const [accountType, setAccountType] = useState('');
+    const [isActive, setIsActive] = useState(true);
+    const [password, setPassword] = useState('');
+
+    const fetchUsers = async () => {
+        try {
+            const res = await fetch('http://localhost:5000/api/admin/users');
+            const data = await res.json();
+            if (data.success) setUsers(data.users);
+        } catch (error) {
+            console.error('Failed to fetch users', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchUsers();
+    }, []);
+
+    const handleUpdate = async (e) => {
+        e.preventDefault();
+        try {
+            const response = await fetch(`http://localhost:5000/api/admin/users/${editUser.user_id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ account_type: accountType, is_active: isActive, password: password || undefined })
+            });
+            if (response.ok) {
+                fetchUsers();
+                setEditUser(null);
+            }
+        } catch (error) {
+            console.error('Update failed');
+        }
+    };
+
+    return (
+        <div className="max-w-7xl mx-auto space-y-6">
+            <h2 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-widest">{dir === 'rtl' ? 'إدارة المستخدمين' : 'User Management'}</h2>
+            <div className="bg-white dark:bg-[#020617] border border-gray-200 dark:border-white/5 rounded-2xl p-6 shadow-sm overflow-hidden text-left font-bold text-sm text-gray-700 dark:text-gray-300">
+                {loading ? <p>Loading...</p> : (
+                    <table className="w-full">
+                        <thead className="text-gray-400 border-b border-gray-100 dark:border-white/5">
+                            <tr>
+                                <th className="pb-4">Username</th>
+                                <th className="pb-4">Full Name</th>
+                                <th className="pb-4">Account Type</th>
+                                <th className="pb-4">Status</th>
+                                <th className="pb-4">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {users.map(u => (
+                                <tr key={u.user_id} className="border-b border-gray-100 dark:border-white/5 last:border-0 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                                    <td className="py-4 font-mono">{u.username}</td>
+                                    <td className="py-4">{u.fullName}</td>
+                                    <td className="py-4"><span className="px-2 py-1 bg-gray-100 dark:bg-white/10 rounded-md text-[10px] uppercase tracking-widest">{u.account_type}</span></td>
+                                    <td className="py-4">
+                                        <span className={`px-2 py-1 rounded-md text-[10px] uppercase tracking-widest ${u.is_active ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
+                                            {u.is_active ? 'Active' : 'Disabled'}
+                                        </span>
+                                    </td>
+                                    <td className="py-4">
+                                        <button onClick={() => {
+                                            setEditUser(u);
+                                            setAccountType(u.account_type);
+                                            setIsActive(u.is_active);
+                                            setPassword('');
+                                        }} className="px-4 py-1.5 bg-primary-100 text-primary-700 hover:bg-primary-200 dark:bg-primary-900/30 dark:text-primary-400 dark:hover:bg-primary-900/50 rounded-lg text-xs transition-all">Edit</button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                )}
+            </div>
+
+            {editUser && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center animate-fade-in p-4">
+                    <div className="bg-white dark:bg-primary-900 p-8 rounded-2xl shadow-premium border border-gray-200 dark:border-white/10 w-full max-w-md relative">
+                        <button onClick={() => setEditUser(null)} className="absolute top-4 right-4 text-gray-400 hover:text-red-500"><X size={20} /></button>
+                        <h3 className="text-xl font-black text-gray-900 dark:text-white uppercase mb-6">Edit User: {editUser.username}</h3>
+                        
+                        <form onSubmit={handleUpdate} className="space-y-4">
+                            <div>
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Account Type</label>
+                                <select value={accountType} onChange={e => setAccountType(e.target.value)} className="w-full mt-1 bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 p-3 rounded-xl font-bold text-sm text-gray-900 dark:text-white outline-none focus:border-primary-500">
+                                    <option value="citizen">Citizen</option>
+                                    <option value="resident">Resident</option>
+                                    <option value="employee">Employee</option>
+                                    <option value="admin">System Admin</option>
+                                    <option value="Ministry Health Admin">Ministry Health Admin</option>
+                                    <option value="Police Officer">Police Officer</option>
+                                    <option value="Printing Officer">Printing Officer</option>
+                                    <option value="Immigration Officer">Immigration Officer</option>
+                                    <option value="Immigration Department Manager">Immigration Manager</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Account Status</label>
+                                <div className="mt-2 flex gap-4">
+                                    <label className="flex items-center gap-2 text-sm font-bold text-gray-900 dark:text-white">
+                                        <input type="radio" checked={isActive === true} onChange={() => setIsActive(true)} /> Active
+                                    </label>
+                                    <label className="flex items-center gap-2 text-sm font-bold text-gray-900 dark:text-white">
+                                        <input type="radio" checked={isActive === false} onChange={() => setIsActive(false)} /> Disabled
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Change Password (Leave blank to keep)</label>
+                                <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full mt-1 bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 p-3 rounded-xl font-bold text-sm text-gray-900 dark:text-white outline-none focus:border-primary-500" placeholder="New Password..." />
+                            </div>
+
+                            <div className="pt-4">
+                                <button type="submit" className="w-full bg-primary-600 hover:bg-primary-700 text-white p-4 rounded-xl font-black text-xs uppercase tracking-widest shadow-md transition-all">Save Changes</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+// --- Sub-component: RevenueDashboard ---
+const RevenueDashboard = () => {
+    const { dir } = useLanguage();
+    const [stats, setStats] = useState(null);
+    const [records, setRecords] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [search, setSearch] = useState('');
+    const [txType, setTxType] = useState('');
+    const [fromDate, setFromDate] = useState('');
+    const [toDate, setToDate] = useState('');
+    const [page, setPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+    const [total, setTotal] = useState(0);
+    const [statsLoading, setStatsLoading] = useState(true);
+
+    const fetchStats = async () => {
+        try {
+            const res = await fetch('http://localhost:5000/api/admin/revenue/stats');
+            const data = await res.json();
+            if (data.success) setStats(data.stats);
+        } catch (e) { console.error(e); } finally { setStatsLoading(false); }
+    };
+
+    const fetchRecords = async () => {
+        setLoading(true);
+        try {
+            const params = new URLSearchParams({ page, limit: 20 });
+            if (search) params.set('search', search);
+            if (txType) params.set('transaction_type', txType);
+            if (fromDate) params.set('from', fromDate);
+            if (toDate) params.set('to', toDate);
+            const res = await fetch(`http://localhost:5000/api/admin/revenue?${params}`);
+            const data = await res.json();
+            if (data.success) { setRecords(data.records); setTotalPages(data.pages); setTotal(data.total); }
+        } catch (e) { console.error(e); } finally { setLoading(false); }
+    };
+
+    useEffect(() => { fetchStats(); }, []);
+    useEffect(() => { fetchRecords(); }, [page, txType, fromDate, toDate]);
+
+    const handleSearch = (e) => { e.preventDefault(); setPage(1); fetchRecords(); };
+    const fmt = (n) => `$${parseFloat(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })} USD`;
+
+    const statCards = [
+        { label: dir === 'rtl' ? 'إجمالي الإيرادات' : 'Grand Total', value: fmt(stats?.grand_total), icon: DollarSign, color: 'gold' },
+        { label: dir === 'rtl' ? 'هذا الشهر' : 'This Month', value: fmt(stats?.monthly), icon: TrendingUp, color: 'blue' },
+        { label: dir === 'rtl' ? 'هذا العام' : 'This Year', value: fmt(stats?.yearly), icon: BarChart2, color: 'green' },
+        { label: dir === 'rtl' ? 'إيرادات الهوية' : 'National ID Revenue', value: fmt(stats?.national_id_total), icon: CreditCard, color: 'purple' },
+        { label: dir === 'rtl' ? 'إيرادات الجواز' : 'Passport Revenue', value: fmt(stats?.passport_total), icon: Plane, color: 'amber' },
+        { label: dir === 'rtl' ? 'إيرادات التجديد' : 'Renewal Revenue', value: fmt(stats?.renewal_total), icon: RotateCw, color: 'teal' },
+        { label: dir === 'rtl' ? 'إيرادات بدل فاقد' : 'Replacement Revenue', value: fmt(stats?.replacement_total), icon: RefreshCcw, color: 'red' },
+    ];
+    const colorMap = { gold: 'bg-gold-50 text-gold-600 dark:bg-gold-500/10 dark:text-gold-400', blue: 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400', green: 'bg-green-50 text-green-600 dark:bg-green-500/10 dark:text-green-400', purple: 'bg-purple-50 text-purple-600 dark:bg-purple-500/10 dark:text-purple-400', amber: 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400', teal: 'bg-teal-50 text-teal-600 dark:bg-teal-500/10 dark:text-teal-400', red: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400' };
+
+    return (
+        <div className="max-w-7xl mx-auto space-y-8">
+            <h2 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-widest">{dir === 'rtl' ? 'لوحة الإيرادات' : 'Revenue Dashboard'}</h2>
+
+            {/* Stats cards */}
+            {statsLoading ? <p className="text-gray-500">Loading stats...</p> : (
+                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {statCards.map((card, i) => (
+                        <div key={i} className="bg-white dark:bg-[#020617] border border-gray-200 dark:border-white/5 rounded-2xl p-5 shadow-sm flex items-center gap-4 hover:border-primary-200 dark:hover:border-white/10 transition-all">
+                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${colorMap[card.color]}`}><card.icon size={22} /></div>
+                            <div className="min-w-0">
+                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest truncate">{card.label}</p>
+                                <p className="text-base font-black text-gray-900 dark:text-white truncate">{card.value}</p>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* Filters */}
+            <div className="bg-white dark:bg-[#020617] border border-gray-200 dark:border-white/5 rounded-2xl p-6 shadow-sm">
+                <form onSubmit={handleSearch} className="flex flex-wrap gap-3 items-end">
+                    <div className="relative flex-1 min-w-[160px]">
+                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input value={search} onChange={e => setSearch(e.target.value)} placeholder={dir === 'rtl' ? 'بحث...' : 'Search applicant, service...'} className="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl pl-9 pr-4 py-2.5 text-sm font-bold text-gray-900 dark:text-white outline-none focus:border-primary-500" />
+                    </div>
+                    <select value={txType} onChange={e => { setTxType(e.target.value); setPage(1); }} className="bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm font-bold text-gray-900 dark:text-white outline-none focus:border-primary-500">
+                        <option value="">{dir === 'rtl' ? 'كل الأنواع' : 'All Types'}</option>
+                        <option value="National ID">National ID</option>
+                        <option value="Passport">Passport</option>
+                    </select>
+                    <input type="date" value={fromDate} onChange={e => { setFromDate(e.target.value); setPage(1); }} className="bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm font-bold text-gray-900 dark:text-white outline-none focus:border-primary-500" />
+                    <input type="date" value={toDate} onChange={e => { setToDate(e.target.value); setPage(1); }} className="bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm font-bold text-gray-900 dark:text-white outline-none focus:border-primary-500" />
+                    <button type="submit" className="bg-primary-600 hover:bg-primary-700 text-white px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all">{dir === 'rtl' ? 'بحث' : 'Search'}</button>
+                    <button type="button" onClick={() => { setSearch(''); setTxType(''); setFromDate(''); setToDate(''); setPage(1); fetchRecords(); }} className="bg-gray-100 hover:bg-gray-200 dark:bg-white/5 dark:hover:bg-white/10 text-gray-700 dark:text-white px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all">{dir === 'rtl' ? 'إعادة' : 'Reset'}</button>
+                </form>
+            </div>
+
+            {/* Table */}
+            <div className="bg-white dark:bg-[#020617] border border-gray-200 dark:border-white/5 rounded-2xl p-6 shadow-sm overflow-hidden">
+                <div className="flex justify-between items-center mb-4">
+                    <span className="text-xs font-black text-gray-400 uppercase tracking-widest">{total} {dir === 'rtl' ? 'معاملة' : 'Transactions'}</span>
+                </div>
+                {loading ? <p className="text-gray-500 text-sm font-bold py-8 text-center">Loading...</p> : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left font-bold text-sm text-gray-700 dark:text-gray-300">
+                            <thead className="text-gray-400 border-b border-gray-100 dark:border-white/5 text-[10px] uppercase tracking-widest">
+                                <tr>
+                                    <th className="pb-4 px-2">{dir === 'rtl' ? 'النوع' : 'Type'}</th>
+                                    <th className="pb-4 px-2">{dir === 'rtl' ? 'الخدمة' : 'Service'}</th>
+                                    <th className="pb-4 px-2">{dir === 'rtl' ? 'المبلغ' : 'Amount'}</th>
+                                    <th className="pb-4 px-2">{dir === 'rtl' ? 'المتقدم' : 'Applicant'}</th>
+                                    <th className="pb-4 px-2">{dir === 'rtl' ? 'رقم الهوية' : 'ID Number'}</th>
+                                    <th className="pb-4 px-2">{dir === 'rtl' ? 'التاريخ' : 'Date'}</th>
+                                    <th className="pb-4 px-2">{dir === 'rtl' ? 'الحالة' : 'Status'}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {records.map(r => (
+                                    <tr key={r.revenue_id} className="border-b border-gray-50 dark:border-white/5 last:border-0 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors text-xs">
+                                        <td className="py-3.5 px-2"><span className="bg-gray-100 dark:bg-white/5 px-2 py-1 rounded text-[9px] uppercase tracking-wider">{r.transaction_type}</span></td>
+                                        <td className="py-3.5 px-2 font-bold text-gray-900 dark:text-white">{r.service_name}</td>
+                                        <td className="py-3.5 px-2 font-black text-green-600 dark:text-green-400">${parseFloat(r.amount).toFixed(2)}</td>
+                                        <td className="py-3.5 px-2">{r.applicant_name || '—'}</td>
+                                        <td className="py-3.5 px-2 font-mono text-primary-600 dark:text-gold-400">{r.id_number || '—'}</td>
+                                        <td className="py-3.5 px-2 text-gray-500">{r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}</td>
+                                        <td className="py-3.5 px-2"><span className="text-[9px] font-black uppercase px-2 py-1 rounded bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">{r.status}</span></td>
+                                    </tr>
+                                ))}
+                                {records.length === 0 && <tr><td colSpan="7" className="py-8 text-center text-gray-400 font-bold">{dir === 'rtl' ? 'لا توجد سجلات إيرادات.' : 'No revenue records found.'}</td></tr>}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+                {/* Pagination */}
+                {totalPages > 1 && (
+                    <div className="flex items-center justify-center gap-2 mt-6">
+                        <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="p-2 rounded-lg bg-gray-100 dark:bg-white/5 disabled:opacity-40 hover:bg-gray-200 dark:hover:bg-white/10 transition-all"><ChevronLeft size={16} /></button>
+                        <span className="text-xs font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">{page} / {totalPages}</span>
+                        <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="p-2 rounded-lg bg-gray-100 dark:bg-white/5 disabled:opacity-40 hover:bg-gray-200 dark:hover:bg-white/10 transition-all"><ChevronRight size={16} /></button>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+// --- Sub-component: ActivityLogs ---
+const ActivityLogs = () => {
+    const { dir } = useLanguage();
+    const [logs, setLogs] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [meta, setMeta] = useState({ eventTypes: [], modules: [], accountTypes: [] });
+    const [search, setSearch] = useState('');
+    const [eventType, setEventType] = useState('');
+    const [moduleName, setModuleName] = useState('');
+    const [fromDate, setFromDate] = useState('');
+    const [toDate, setToDate] = useState('');
+    const [page, setPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+    const [total, setTotal] = useState(0);
+    const [selectedLog, setSelectedLog] = useState(null);
+
+    const eventColorMap = {
+        REQUEST_APPROVED: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+        REQUEST_REJECTED: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+        REQUEST_UPDATED: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+        DOCUMENT_PRINTED: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+        LOGIN: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400',
+        LOGOUT: 'bg-gray-100 text-gray-700 dark:bg-white/10 dark:text-gray-400',
+    };
+    const getEventColor = (type) => eventColorMap[type] || 'bg-gray-100 text-gray-600 dark:bg-white/5 dark:text-gray-400';
+
+    const fetchMeta = async () => {
+        try {
+            const res = await fetch('http://localhost:5000/api/admin/logs/meta');
+            const data = await res.json();
+            if (data.success) setMeta(data);
+        } catch (e) { console.error(e); }
+    };
+
+    const fetchLogs = async () => {
+        setLoading(true);
+        try {
+            const params = new URLSearchParams({ page, limit: 50 });
+            if (search) params.set('search', search);
+            if (eventType) params.set('event_type', eventType);
+            if (moduleName) params.set('module_name', moduleName);
+            if (fromDate) params.set('from', fromDate);
+            if (toDate) params.set('to', toDate);
+            const res = await fetch(`http://localhost:5000/api/admin/logs?${params}`);
+            const data = await res.json();
+            if (data.success) { setLogs(data.logs); setTotalPages(data.pages); setTotal(data.total); }
+        } catch (e) { console.error(e); } finally { setLoading(false); }
+    };
+
+    useEffect(() => { fetchMeta(); }, []);
+    useEffect(() => { fetchLogs(); }, [page, eventType, moduleName, fromDate, toDate]);
+
+    const handleSearch = (e) => { e.preventDefault(); setPage(1); fetchLogs(); };
+    const handleReset = () => { setSearch(''); setEventType(''); setModuleName(''); setFromDate(''); setToDate(''); setPage(1); };
+
+    return (
+        <div className="max-w-7xl mx-auto space-y-6">
+            <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-widest">{dir === 'rtl' ? 'سجلات النظام' : 'Activity Logs'}</h2>
+                <div className="flex items-center gap-2 text-xs font-black text-gray-400 uppercase tracking-widest">
+                    <Terminal size={16} className="text-primary-500" />
+                    {total} {dir === 'rtl' ? 'سجل' : 'Records'}
+                </div>
+            </div>
+
+            {/* Filters */}
+            <div className="bg-white dark:bg-[#020617] border border-gray-200 dark:border-white/5 rounded-2xl p-6 shadow-sm">
+                <form onSubmit={handleSearch} className="flex flex-wrap gap-3 items-end">
+                    <div className="relative flex-1 min-w-[200px]">
+                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input value={search} onChange={e => setSearch(e.target.value)} placeholder={dir === 'rtl' ? 'بحث في السجلات...' : 'Search logs...'} className="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl pl-9 pr-4 py-2.5 text-sm font-bold text-gray-900 dark:text-white outline-none focus:border-primary-500" />
+                    </div>
+                    <select value={eventType} onChange={e => { setEventType(e.target.value); setPage(1); }} className="bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-900 dark:text-white outline-none focus:border-primary-500">
+                        <option value="">{dir === 'rtl' ? 'كل الأحداث' : 'All Events'}</option>
+                        {meta.eventTypes.map(e => <option key={e} value={e}>{e}</option>)}
+                    </select>
+                    <select value={moduleName} onChange={e => { setModuleName(e.target.value); setPage(1); }} className="bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-900 dark:text-white outline-none focus:border-primary-500">
+                        <option value="">{dir === 'rtl' ? 'كل الوحدات' : 'All Modules'}</option>
+                        {meta.modules.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                    <input type="date" value={fromDate} onChange={e => { setFromDate(e.target.value); setPage(1); }} className="bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm font-bold text-gray-900 dark:text-white outline-none focus:border-primary-500" />
+                    <input type="date" value={toDate} onChange={e => { setToDate(e.target.value); setPage(1); }} className="bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm font-bold text-gray-900 dark:text-white outline-none focus:border-primary-500" />
+                    <button type="submit" className="bg-primary-600 hover:bg-primary-700 text-white px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all">{dir === 'rtl' ? 'بحث' : 'Search'}</button>
+                    <button type="button" onClick={handleReset} className="bg-gray-100 hover:bg-gray-200 dark:bg-white/5 dark:hover:bg-white/10 text-gray-700 dark:text-white px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all">{dir === 'rtl' ? 'إعادة' : 'Reset'}</button>
+                </form>
+            </div>
+
+            {/* Logs Table */}
+            <div className="bg-white dark:bg-[#020617] border border-gray-200 dark:border-white/5 rounded-2xl p-6 shadow-sm overflow-hidden">
+                {loading ? <p className="text-center text-sm text-gray-500 font-bold py-8">Loading logs...</p> : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left font-bold text-sm text-gray-700 dark:text-gray-300">
+                            <thead className="text-gray-400 border-b border-gray-100 dark:border-white/5 text-[10px] uppercase tracking-widest">
+                                <tr>
+                                    <th className="pb-4 px-2">ID</th>
+                                    <th className="pb-4 px-2">{dir === 'rtl' ? 'الحدث' : 'Event'}</th>
+                                    <th className="pb-4 px-2">{dir === 'rtl' ? 'الوحدة' : 'Module'}</th>
+                                    <th className="pb-4 px-2">{dir === 'rtl' ? 'المستخدم' : 'User'}</th>
+                                    <th className="pb-4 px-2">{dir === 'rtl' ? 'الوصف' : 'Description'}</th>
+                                    <th className="pb-4 px-2">{dir === 'rtl' ? 'التاريخ' : 'Date & Time'}</th>
+                                    <th className="pb-4 px-2">{dir === 'rtl' ? 'عرض' : 'Detail'}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {logs.map(log => (
+                                    <tr key={log.log_id} className="border-b border-gray-50 dark:border-white/5 last:border-0 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors text-xs">
+                                        <td className="py-3 px-2 font-mono text-gray-400">#{log.log_id}</td>
+                                        <td className="py-3 px-2"><span className={`text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md ${getEventColor(log.event_type)}`}>{log.event_type}</span></td>
+                                        <td className="py-3 px-2 text-gray-500">{log.module_name}</td>
+                                        <td className="py-3 px-2 text-gray-900 dark:text-white">{log.username || '—'}</td>
+                                        <td className="py-3 px-2 max-w-xs truncate" title={log.description}>{log.description}</td>
+                                        <td className="py-3 px-2 text-gray-400 whitespace-nowrap">{log.created_at ? new Date(log.created_at).toLocaleString() : '—'}</td>
+                                        <td className="py-3 px-2">
+                                            <button onClick={() => setSelectedLog(log)} className="p-1.5 bg-gray-100 dark:bg-white/5 hover:bg-primary-600 hover:text-white dark:hover:bg-primary-600 rounded-lg transition-all"><Eye size={14} /></button>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {logs.length === 0 && <tr><td colSpan="7" className="py-8 text-center text-gray-400 font-bold">{dir === 'rtl' ? 'لا توجد سجلات.' : 'No logs found.'}</td></tr>}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+                {/* Pagination */}
+                {totalPages > 1 && (
+                    <div className="flex items-center justify-center gap-2 mt-6">
+                        <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="p-2 rounded-lg bg-gray-100 dark:bg-white/5 disabled:opacity-40"><ChevronLeft size={16} /></button>
+                        <span className="text-xs font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">{page} / {totalPages}</span>
+                        <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="p-2 rounded-lg bg-gray-100 dark:bg-white/5 disabled:opacity-40"><ChevronRight size={16} /></button>
+                    </div>
+                )}
+            </div>
+
+            {/* Detail Modal */}
+            {selectedLog && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center animate-fade-in p-4">
+                    <div className="bg-white dark:bg-primary-900 p-8 rounded-2xl shadow-premium border border-gray-200 dark:border-white/10 w-full max-w-lg relative">
+                        <button onClick={() => setSelectedLog(null)} className="absolute top-4 right-4 text-gray-400 hover:text-red-500"><X size={20} /></button>
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="w-10 h-10 bg-primary-100 dark:bg-primary-500/20 rounded-xl flex items-center justify-center text-primary-600"><ScrollText size={20} /></div>
+                            <div>
+                                <h3 className="text-lg font-black text-gray-900 dark:text-white uppercase">{dir === 'rtl' ? 'تفاصيل السجل' : 'Log Detail'}</h3>
+                                <p className="text-[10px] font-bold text-gray-400">#{selectedLog.log_id}</p>
+                            </div>
+                        </div>
+                        <div className="space-y-3">
+                            {[
+                                { label: 'Event Type', value: selectedLog.event_type },
+                                { label: 'Module', value: selectedLog.module_name },
+                                { label: 'Description', value: selectedLog.description },
+                                { label: 'User ID', value: selectedLog.user_id || '—' },
+                                { label: 'Username', value: selectedLog.username || '—' },
+                                { label: 'Account Type', value: selectedLog.account_type || '—' },
+                                { label: 'IP Address', value: selectedLog.ip_address || '—' },
+                                { label: 'Date & Time', value: selectedLog.created_at ? new Date(selectedLog.created_at).toLocaleString() : '—' },
+                                { label: 'Metadata', value: selectedLog.metadata || '—' },
+                            ].map((item, i) => (
+                                <div key={i} className="flex gap-4 items-start">
+                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest w-28 shrink-0 pt-0.5">{item.label}</span>
+                                    <span className="text-sm font-bold text-gray-900 dark:text-white break-all">{item.value}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
 // --- Main Admin Dashboard ---
 const AdminDashboard = () => {
-    const { t, dir } = useLanguage();
+    const { t, dir, language, setLanguage } = useLanguage();
     const { theme, toggleTheme } = useTheme();
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [pendingCount, setPendingCount] = useState(0);
+    const [langMenuOpen, setLangMenuOpen] = useState(false);
     const location = useLocation();
     const navigate = useNavigate();
     const userData = JSON.parse(localStorage.getItem('user') || '{}');
 
+    // Auth Check
+    useEffect(() => {
+        const u = localStorage.getItem('user');
+        if (!u) {
+            navigate('/');
+            return;
+        }
+        const user = JSON.parse(u);
+        const adminRoles = ['Printing_Officer', 'Immigration_Officer', 'Immigration_Department_Manager', 'admin'];
+        if (!adminRoles.includes(user.account_type)) {
+            navigate('/home');
+        }
+    }, [navigate]);
+
+    // Dynamic pending badge
+    useEffect(() => {
+        const fetchPending = async () => {
+            try {
+                const res = await fetch('http://localhost:5000/api/admin/requests/pending-count');
+                const data = await res.json();
+                if (data.success) setPendingCount(data.count);
+            } catch (e) { /* silent */ }
+        };
+        fetchPending();
+        const interval = setInterval(fetchPending, 30000); // refresh every 30s
+        return () => clearInterval(interval);
+    }, []);
+
+    const languages = [
+        { code: 'ar', label: 'العربية', flag: '🇸🇴' },
+        { code: 'en', label: 'English', flag: '🇬🇧' },
+        { code: 'so', label: 'Soomaali', flag: '🇸🇴' },
+    ];
+
     return (
         <div className={`min-h-screen flex transition-colors duration-500 ${theme === 'dark' ? 'bg-[#0a101f]' : 'bg-[#f4f7f9]'}`}>
-            <AdminSidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
+            <AdminSidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} pendingCount={pendingCount} />
 
             <div className={`flex-grow flex flex-col transition-all duration-500 ${dir === 'rtl' ? 'lg:mr-72' : 'lg:ml-72'}`}>
 
@@ -2489,7 +3974,39 @@ const AdminDashboard = () => {
                         </div>
                     </div>
 
-                    <div className={`flex items-center gap-4 ${dir === 'rtl' ? 'flex-row-reverse' : 'flex-row'}`}>
+                    <div className={`flex items-center gap-3 ${dir === 'rtl' ? 'flex-row-reverse' : 'flex-row'}`}>
+                        {/* Language Switcher */}
+                        <div className="relative">
+                            <button
+                                onClick={() => setLangMenuOpen(v => !v)}
+                                className="flex items-center gap-2 p-2.5 rounded-xl bg-gray-100 dark:bg-white/5 text-gray-500 dark:text-gold-400 border border-transparent dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10 transition-all"
+                                title="Switch Language"
+                            >
+                                <Globe size={18} />
+                                <span className="text-xs font-black hidden sm:block">{language.toUpperCase()}</span>
+                                <ChevronDown size={12} />
+                            </button>
+                            {langMenuOpen && (
+                                <div className={`absolute top-full mt-2 ${dir === 'rtl' ? 'left-0' : 'right-0'} w-44 bg-white dark:bg-[#020617] rounded-xl shadow-2xl border border-gray-200 dark:border-white/10 p-2 z-50 animate-fade-in`}>
+                                    {languages.map(lang => (
+                                        <button
+                                            key={lang.code}
+                                            onClick={() => { setLanguage(lang.code); setLangMenuOpen(false); localStorage.setItem('admin_lang', lang.code); }}
+                                            className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-bold transition-all ${
+                                                language === lang.code
+                                                    ? 'bg-primary-600 text-white'
+                                                    : 'text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-white/10'
+                                            }`}
+                                        >
+                                            <span className="text-base">{lang.flag}</span>
+                                            {lang.label}
+                                            {language === lang.code && <Check size={14} className="ml-auto" />}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
                         <button onClick={toggleTheme} className="p-2.5 rounded-xl bg-gray-100 dark:bg-white/5 text-gray-500 dark:text-gold-400 border border-transparent dark:border-white/10 hover:bg-gray-200 transition-all">{theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}</button>
                         <div className="group relative">
                             <div className="bg-white/95 dark:bg-primary-900/20 p-1.5 ltr:pr-4 rtl:pl-4 rounded-xl border border-gray-200 dark:border-white/10 flex items-center gap-3 cursor-pointer hover:border-primary-400 transition-all shadow-sm">
@@ -2519,11 +4036,25 @@ const AdminDashboard = () => {
                         <Route path="/register-resident" element={<ResidentRegistration />} />
                         <Route path="/issue-id" element={<IssueIDCard />} />
                         <Route path="/renew-id" element={<IdentityRenewal />} />
-                        <Route path="/passports" element={<PassportIssuance />} />
                         <Route path="/renew-passport" element={<PassportRenewal />} />
                         <Route path="/search-id" element={<IdentitySearch />} />
                         <Route path="/search-passport" element={<PassportSearch />} />
+                        <Route path="/birth-certificates" element={<BirthCertificateServices dir={dir} lang={language} />} />
+                        <Route path="/print-id" element={<PrintIdentity />} />
+                        <Route path="/print-passport" element={<PrintPassport />} />
+                        <Route path="/printing-queue" element={<PrintingQueue />} />
+                        <Route path="/printing-history" element={<PrintingHistory />} />
+                        <Route path="/revenue" element={<RevenueDashboard />} />
+                        <Route path="/logs" element={<ActivityLogs />} />
+                        <Route path="/users" element={<UserManagement />} />
                         <Route path="/profile" element={<AdminProfile />} />
+                        {/* ─── Reports Routes ─── */}
+                        <Route path="/reports/national-id" element={<NationalIDReport />} />
+                        <Route path="/reports/passport" element={<PassportReport />} />
+                        <Route path="/reports/revenue" element={<RevenueReport />} />
+                        <Route path="/reports/printing" element={<PrintingReport />} />
+                        <Route path="/reports/users" element={<UserReport />} />
+                        <Route path="/reports/activity-logs" element={<ActivityLogReport />} />
                     </Routes>
                 </main>
             </div>

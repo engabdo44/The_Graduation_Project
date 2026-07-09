@@ -20,6 +20,8 @@ model birth_certificates {
   ai_note        String?  @db.Text
   uid            String   @unique @db.VarChar(50)
   created_at     DateTime @default(now()) @db.DateTime(0)
+  
+  requests       certificate_requests[]
 }
 
 model death_certificates {
@@ -49,3 +51,81 @@ model health_records {
   region           String   @db.VarChar(100)
   created_at       DateTime @default(now()) @db.DateTime(0)
 }
+
+model users {
+  user_id       BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  citizen_id    BigInt?   @unique @db.UnsignedBigInt
+  resident_id   BigInt?   @unique @db.UnsignedBigInt
+  employee_id   BigInt?   @db.UnsignedBigInt
+  username      String    @unique @db.VarChar(50)
+  email         String    @unique @db.VarChar(120)
+  password_hash String    @db.VarChar(255)
+  account_type  String    @db.VarChar(50)
+  is_active     Boolean?  @default(true)
+  last_login    DateTime? @db.DateTime(0)
+  created_at    DateTime? @default(now()) @db.DateTime(0)
+
+  employees     employees? @relation(fields: [employee_id], references: [employee_id], onDelete: Cascade)
+  
+  @@index([employee_id], map: "users_employee_id_fkey")
+}
+
+model employees {
+  employee_id BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  full_name   String    @db.VarChar(200)
+  role        String    @db.VarChar(60)
+  department  String?   @db.VarChar(100)
+  phone       String?   @db.VarChar(30)
+  email       String?   @db.VarChar(120)
+  
+  users       users[]
+}
+
+model certificate_requests {
+  request_id      BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  user_id         BigInt?  @db.UnsignedBigInt
+  birth_id        BigInt   @db.UnsignedBigInt
+  service_type    String   @db.VarChar(100)
+  fee             Decimal  @db.Decimal(10, 2)
+  status          String   @default("submitted") @db.VarChar(50)
+  created_at      DateTime @default(now()) @db.DateTime(0)
+  approval_date   DateTime? @db.DateTime(0)
+  print_date      DateTime? @db.DateTime(0)
+  patient_name    String?  @db.VarChar(200)
+  certificate_number String? @db.VarChar(50)
+
+  birth_certificate birth_certificates @relation(fields: [birth_id], references: [birth_id], onDelete: Cascade)
+}
+
+model revenue {
+  revenue_id     BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  transaction_type String @db.VarChar(100)
+  amount         Decimal  @db.Decimal(10, 2)
+  request_id     BigInt?  @db.UnsignedBigInt
+  applicant_name String?  @db.VarChar(200)
+  status         String?  @default("completed") @db.VarChar(50)
+  created_at     DateTime @default(now()) @db.DateTime(0)
+}
+
+model notifications {
+  notification_id BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  user_id         String?  @db.VarChar(50) 
+  account_type    String?  @db.VarChar(50)
+  title           String   @db.VarChar(200)
+  message         String   @db.Text
+  notification_type String @db.VarChar(100)
+  is_read         Boolean  @default(false)
+  created_at      DateTime @default(now()) @db.DateTime(0)
+}
+
+model system_logs {
+  log_id         BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  action         String   @db.VarChar(255)
+  module_name    String?  @db.VarChar(100)
+  description    String?  @db.Text
+  username       String?  @db.VarChar(100)
+  user_id        String?  @db.VarChar(50)
+  account_type   String?  @db.VarChar(50)
+  created_at     DateTime @default(now()) @db.DateTime(0)
+}
+

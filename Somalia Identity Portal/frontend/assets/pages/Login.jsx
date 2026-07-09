@@ -45,10 +45,13 @@ const Login = () => {
                 // Store user data in localStorage
                 localStorage.setItem('user', JSON.stringify(data.user));
 
-                if (data.user.account_type === 'admin') {
+                const adminRoles = ['Printing_Officer', 'Immigration_Officer', 'Immigration_Department_Manager', 'admin'];
+                if (adminRoles.includes(data.user.account_type)) {
                     navigate('/admin');
-                } else {
+                } else if (['citizen', 'resident'].includes(data.user.account_type)) {
                     navigate('/home');
+                } else {
+                    setError('Unauthorized account type.');
                 }
             } else {
                 setError(data.message || t.invalidCredentials || 'Invalid credentials');

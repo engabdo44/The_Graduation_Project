@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { summarizeHealthRecord } from '../services/geminiService';
 import { translations } from '../translations';
+import { NotificationContainer } from './Notification';
 
 const HealthRecords = ({ lang }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -10,6 +11,7 @@ const HealthRecords = ({ lang }) => {
   const [loading, setLoading] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [isAddingPatient, setIsAddingPatient] = useState(false);
+  const [notifications, setNotifications] = useState([]);
 
   // New Patient Form State
   const [newPatient, setNewPatient] = useState({
@@ -27,6 +29,15 @@ const HealthRecords = ({ lang }) => {
 
   const t = translations[lang].records;
   const common = translations[lang].common;
+
+  const addNotification = (type, message) => {
+    const id = Date.now();
+    setNotifications(prev => [...prev, { id, type, message }]);
+  };
+
+  const removeNotification = (id) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
 
   const handleSearch = async () => {
     if (!searchTerm.trim()) return;
@@ -52,14 +63,16 @@ const HealthRecords = ({ lang }) => {
         };
         setSelectedPatient(formattedPatient);
       } else {
-        if(lang === 'ar') alert("فشل البحث. المريض غير موجود في السجل الوطني.");
-        else if(lang === 'so') alert("Baadhitaanku waa fashilmay. Bukaan lama helin.");
-        else alert("Search failed. Patient not found in national records.");
+        const errorMsg = lang === 'ar' ? 'فشل البحث. المريض غير موجود في السجل الوطني' :
+                          lang === 'so' ? 'Baadhitaanku waa fashilmay. Bukaan lama helin' :
+                          'Search failed. Patient not found in national records';
+        addNotification('error', errorMsg);
       }
     } catch (err) {
       console.error(err);
-      if(lang === 'ar') alert("حدث خطأ أثناء الاتصال بقاعدة بيانات الصحة.");
-      else alert("Error connecting to national health database.");
+      const errorMsg = lang === 'ar' ? 'حدث خطأ أثناء الاتصال بقاعدة بيانات الصحة' :
+                        'Error connecting to national health database';
+      addNotification('error', errorMsg);
     } finally {
       setSearchLoading(false);
     }
@@ -82,8 +95,9 @@ const HealthRecords = ({ lang }) => {
       });
 
       if (response.ok) {
-        if (lang === 'ar') alert("تم تسجيل السجل الطبي للمريض بنجاح في قاعدة البيانات!");
-        else alert("Patient medical record registered successfully in database!");
+        const successMsg = lang === 'ar' ? 'تم تسجيل السجل الطبي للمريض بنجاح في قاعدة البيانات' :
+                           'Patient medical record registered successfully in database';
+        addNotification('success', successMsg);
         
         // Auto-fill searching and view their record
         setSearchTerm(newPatient.id_number);
@@ -102,11 +116,11 @@ const HealthRecords = ({ lang }) => {
         });
       } else {
         const errorData = await response.json();
-        alert(`Error: ${errorData.error || 'Registration failed'}`);
+        addNotification('error', errorData.error || 'Registration failed');
       }
     } catch (err) {
       console.error(err);
-      alert("Failed to save patient record to server.");
+      addNotification('error', 'Failed to save patient record to server');
     } finally {
       setRegisterLoading(false);
     }
@@ -122,6 +136,7 @@ const HealthRecords = ({ lang }) => {
 
   return (
     <div className={`space-y-6 ${lang === 'ar' ? 'font-arabic' : ''}`}>
+      <NotificationContainer notifications={notifications} removeNotification={removeNotification} lang={lang} />
       <motion.header 
         initial={{ y: -5, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -403,7 +418,7 @@ const HealthRecords = ({ lang }) => {
 
                     <div className="grid grid-cols-2 gap-4 pb-6">
                        <AdminAction icon="fa-file-signature" label={lang === 'ar' ? 'سجل جديد' : 'New Record'} color="bg-gov-navy" lang={lang} onClick={() => setIsAddingPatient(true)} />
-                       <AdminAction icon="fa-capsules" label={lang === 'ar' ? 'وصفة طبية' : 'Prescription'} color="bg-gov-blue" lang={lang} onClick={() => alert("E-Prescribing is secured and locked.")} />
+                       <AdminAction icon="fa-capsules" label={lang === 'ar' ? 'وصفة طبية' : 'Prescription'} color="bg-gov-blue" lang={lang} onClick={() => addNotification('info', lang === 'ar' ? 'الوصفات الإلكترونية مؤمنة ومقفلة' : 'E-Prescribing is secured and locked')} />
                     </div>
                   </div>
                 </motion.div>

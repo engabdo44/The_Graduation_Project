@@ -15,6 +15,26 @@ const Header = () => {
     const navigate = useNavigate();
     const langRef = useRef(null);
 
+    const [notifications, setNotifications] = useState([]);
+    const [isNotifOpen, setIsNotifOpen] = useState(false);
+    const notifRef = useRef(null);
+
+    const fetchNotifications = async () => {
+        const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+        if (!storedUser.account_type) return;
+        const accId = storedUser.citizen_id || storedUser.resident_id || storedUser.user_id;
+
+        try {
+            const res = await fetch(`http://localhost:5000/api/notifications?user_id=${accId}&account_type=${storedUser.account_type}`);
+            const data = await res.json();
+            if (data.success) {
+                setNotifications(data.notifications || []);
+            }
+        } catch (e) {
+            console.error('Failed to fetch notifications', e);
+        }
+    };
+
     useEffect(() => {
         const handleScroll = () => {
             setScrolled(window.scrollY > 10);
@@ -25,6 +45,9 @@ const Header = () => {
             if (langRef.current && !langRef.current.contains(event.target)) {
                 setIsLangOpen(false);
             }
+            if (notifRef.current && !notifRef.current.contains(event.target)) {
+                setIsNotifOpen(false);
+            }
         };
         document.addEventListener('mousedown', handleClickOutside);
 
@@ -33,6 +56,39 @@ const Header = () => {
             document.removeEventListener('mousedown', handleClickOutside);
         };
     }, []);
+
+    useEffect(() => {
+        fetchNotifications();
+        // Optional: Polling every 30 seconds
+        const interval = setInterval(fetchNotifications, 30000);
+        return () => clearInterval(interval);
+    }, []);
+
+    const markAsRead = async (id, e) => {
+        if(e) e.stopPropagation();
+        try {
+            await fetch(`http://localhost:5000/api/notifications/${id}/read`, { method: 'PUT' });
+            setNotifications(prev => prev.map(n => n.notification_id === id ? { ...n, is_read: true } : n));
+        } catch (error) {
+            console.error("Failed to mark read");
+        }
+    };
+
+    const markAllAsRead = async (e) => {
+        if(e) e.stopPropagation();
+        const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+        const accId = storedUser.citizen_id || storedUser.resident_id || storedUser.user_id;
+        try {
+            await fetch('http://localhost:5000/api/notifications/read-all', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: accId, account_type: storedUser.account_type })
+            });
+            setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+        } catch (error) {
+            console.error("Failed to mark all read");
+        }
+    };
 
     const handleLogout = () => {
         localStorage.removeItem('user');
@@ -173,6 +229,52 @@ const Header = () => {
                             {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
                         </button>
 
+                        <div className="relative" ref={notifRef}>
+                            <button
+                                onClick={() => setIsNotifOpen(!isNotifOpen)}
+                                className="relative p-3 rounded-full bg-gray-50 dark:bg-white/5 text-gray-600 dark:text-gold-400 border border-gray-200 dark:border-white/10 hover:bg-primary-50 transition-all shadow-sm"
+                            >
+                                <Bell size={20} />
+                                {notifications.filter(n => !n.is_read).length > 0 && (
+                                    <span className="absolute top-0 right-0 w-4 h-4 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center font-bold border-2 border-white dark:border-slate-900 animate-pulse">
+                                        {notifications.filter(n => !n.is_read).length}
+                                    </span>
+                                )}
+                            </button>
+
+                            {isNotifOpen && (
+                                <div className={`absolute top-full ${dir === 'rtl' ? 'left-0' : 'right-0'} mt-3 w-80 bg-white/95 dark:bg-slate-900/95 shadow-2xl rounded-[1.5rem] border border-gray-100 dark:border-white/10 overflow-hidden backdrop-blur-xl animate-fade-in-up z-[100]`}>
+                                    <div className="p-4 border-b border-gray-100 dark:border-white/10 flex items-center justify-between">
+                                        <h3 className="font-black text-gray-900 dark:text-white text-sm">الإشعارات</h3>
+                                        <button onClick={markAllAsRead} className="text-[10px] text-primary-600 dark:text-gold-400 font-bold hover:underline">تحديد الكل كمقروء</button>
+                                    </div>
+                                    <div className="max-h-80 overflow-y-auto no-scrollbar pb-2">
+                                        {notifications.length === 0 ? (
+                                            <div className="p-6 text-center text-gray-400 text-xs font-bold">لا توجد إشعارات جديدة</div>
+                                        ) : (
+                                            notifications.map(n => (
+                                                <div key={n.notification_id} onClick={() => !n.is_read && markAsRead(n.notification_id)} className={`p-4 border-b border-gray-50 dark:border-white/5 last:border-0 cursor-pointer transition-colors ${n.is_read ? 'opacity-60' : 'bg-primary-50/50 dark:bg-primary-900/20'}`}>
+                                                    <div className="flex justify-between items-start mb-1">
+                                                        <span className="text-[11px] font-black text-gray-900 dark:text-white">{n.title}</span>
+                                                        <span className="text-[9px] text-gray-400 whitespace-nowrap">{new Date(n.created_at).toLocaleDateString()}</span>
+                                                    </div>
+                                                    <p className="text-[10px] text-gray-600 dark:text-gray-300 leading-relaxed">{n.message}</p>
+                                                    {!n.is_read && (
+                                                        <div className="mt-2 flex justify-end">
+                                                            <button onClick={(e) => markAsRead(n.notification_id, e)} className="text-[9px] text-primary-600 dark:text-gold-500 font-bold hover:underline border border-primary-200 dark:border-gold-500/30 px-2 py-0.5 rounded-full">مقروء</button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                    <div className="p-3 border-t border-gray-100 dark:border-white/10 bg-gray-50 dark:bg-white/5 text-center">
+                                        <Link to="/notifications" onClick={() => setIsNotifOpen(false)} className="text-[11px] font-black text-primary-900 dark:text-white hover:text-primary-600 transition-colors">عرض كل الإشعارات</Link>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
                         <div className="group relative">
                             <button className="w-11 h-11 rounded-full bg-primary-900 border-2 border-gold-500/30 flex items-center justify-center text-gold-400 shadow-lg hover:scale-105 transition-transform active:scale-95 overflow-hidden">
                                 <UserCircle size={28} />
@@ -182,10 +284,14 @@ const Header = () => {
                                     <User size={18} className="text-primary-600 dark:text-gold-500 group-hover:text-white transition-colors" />
                                     {t.profile}
                                 </Link>
-                                <Link to="/notifications" className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-primary-600 hover:text-white dark:hover:bg-primary-600 dark:hover:text-white rounded-xl text-[13px] font-bold text-gray-800 dark:text-white transition-all group/notif">
-                                    <Bell size={18} className="text-primary-600 dark:text-gold-500 group-hover:text-white transition-colors" />
-                                    {t.notifications}
-                                    <span className="ltr:ml-auto rtl:mr-auto w-5 h-5 bg-red-500 text-white text-[10px] rounded-full flex items-center justify-center">3</span>
+                                <Link to="/notifications" className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-primary-600 hover:text-white dark:hover:bg-primary-600 dark:hover:text-white rounded-xl text-[13px] font-bold text-gray-800 dark:text-white transition-all group/notif">
+                                    <div className="flex items-center gap-3">
+                                        <Bell size={18} className="text-primary-600 dark:text-gold-500 group-hover:text-white transition-colors" />
+                                        {t.notifications}
+                                    </div>
+                                    {notifications.filter(n => !n.is_read).length > 0 && (
+                                        <span className="w-5 h-5 bg-red-500 text-white text-[10px] rounded-full flex items-center justify-center">{notifications.filter(n => !n.is_read).length}</span>
+                                    )}
                                 </Link>
                                 <Link to="/requests" className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-primary-600 hover:text-white dark:hover:bg-primary-600 dark:hover:text-white rounded-xl text-[13px] font-bold text-gray-800 dark:text-white transition-all group/hist">
                                     <History size={18} className="text-primary-600 dark:text-gold-500 group-hover:text-white transition-colors" />

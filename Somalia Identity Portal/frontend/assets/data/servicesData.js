@@ -13,26 +13,17 @@ export const getServices = (t) => [
     // 1. Identity Services
     { id: 'id-renew', category: 'identity', title: t.services.idRenew, description: t.services.idRenewDesc, icon: Users, tags: ['ID'], type: 'identity', requirements: t.services.idRenewReq },
     { id: 'id-replace', category: 'identity', title: t.services.idLost, description: t.services.idLostDesc, icon: Shield, tags: ['ID'], type: 'identity', requirements: t.services.idLostReq },
-    { id: 'biometrics', category: 'identity', title: t.services.biometrics, description: t.services.biometricsDesc, icon: Fingerprint, tags: ['Security'], type: 'security', requirements: t.services.biometricsReq },
+    { id: 'id-update', category: 'identity', title: t.dir === 'rtl' ? 'تحديث المعلومات الشخصية' : 'Update Personal Information', description: t.dir === 'rtl' ? 'تحديث وتعديل البيانات الشخصية' : 'Update and modify your personal information', icon: UserCheck, tags: ['Update'], type: 'identity', requirements: t.services.idRenewReq },
 
     // 2. Passport Services
     { id: 'passport-renew', category: 'passport', title: t.services.pptRenew, description: t.services.pptRenewDesc, icon: FileText, tags: ['Passport'], type: 'passport', requirements: t.services.pptRenewReq },
     { id: 'passport-replace', category: 'passport', title: t.services.pptLost, description: t.services.pptLostDesc, icon: CreditCard, tags: ['Passport'], type: 'passport', requirements: t.services.pptLostReq },
-    { id: 'visas', category: 'passport', title: t.services.visas, description: t.services.visasDesc, icon: Globe, tags: ['Travel'], type: 'travel', requirements: t.services.visasReq },
-    { id: 'travel-history', category: 'passport', title: t.services.travelHistory, description: t.services.travelHistoryDesc, icon: Plane, tags: ['Travel'], type: 'travel', requirements: t.services.travelHistoryReq },
+    { id: 'passport-update', category: 'passport', title: t.dir === 'rtl' ? 'تحديث معلومات الجواز' : 'Update Passport Information', description: t.dir === 'rtl' ? 'تحديث وتعديل بيانات الجواز' : 'Update and modify your passport information', icon: FileText, tags: ['Update'], type: 'passport', requirements: t.services.pptRenewReq },
 
     // 3. Legal & Security
     { id: 'criminal-record', category: 'legal', title: t.services.criminalRecord, description: t.services.criminalRecordDesc, icon: FileWarning, tags: ['Legal'], type: 'legal', requirements: t.services.criminalRecordReq },
-    { id: 'doc-verify', category: 'legal', title: t.services.docVerify, description: t.services.docVerifyDesc, icon: CheckCircle2, tags: ['Security'], type: 'general', requirements: t.services.docVerifyReq },
 
-    // 4. Civil Services
-    { id: 'residence-cert', category: 'civil', title: t.services.residenceCert, description: t.services.residenceCertDesc, icon: Home, tags: ['Civil'], type: 'civil', requirements: t.services.residenceCertReq },
-
-    // 5. Digital Services
-    { id: 'digital-docs', category: 'digital', title: t.services.digitalDocs, description: t.services.digitalDocsDesc, icon: Smartphone, tags: ['Digital'], type: 'digital', requirements: t.services.digitalDocsReq },
-    { id: 'app-status', category: 'digital', title: t.services.appStatus, description: t.services.appStatusDesc, icon: Activity, tags: ['General'], type: 'general', requirements: t.services.appStatusReq },
-
-    // 6. Administrative
-    { id: 'appointments', category: 'admin', title: t.services.appointments, description: t.services.appointmentsDesc, icon: Calendar, tags: ['General'], type: 'general', requirements: t.services.appointmentsReq },
-    { id: 'delivery', category: 'admin', title: t.services.delivery, description: t.services.deliveryDesc, icon: Truck, tags: ['Logistics'], type: 'general', requirements: t.services.deliveryReq },
+    // 4. Birth Certificate Services
+    { id: 'birth-cert-pdf', category: 'health', title: t.dir === 'rtl' ? 'شهادة ميلاد PDF' : 'Birth Certificate PDF', description: t.dir === 'rtl' ? 'إنشاء وتنزيل نسخة PDF رسمية مجانية لشهادة الميلاد.' : 'Generate and download an official Birth Certificate PDF using existing birth registration records.', icon: FileText, tags: ['Health'], type: 'health', requirements: [t.dir === 'rtl' ? 'رقم الهوية الوطنية' : 'National ID Number'] },
+    { id: 'birth-cert-reprint', category: 'health', title: t.dir === 'rtl' ? 'إعادة طباعة شهادة الميلاد' : 'Birth Certificate Reprint', description: t.dir === 'rtl' ? 'طلب نسخة مطبوعة رسمية من شهادة الميلاد الحالية الخاصة بك.' : 'Request an official printed copy of an existing Birth Certificate.', icon: Baby, tags: ['Health'], type: 'health', requirements: [t.dir === 'rtl' ? 'رقم الهوية الوطنية' : 'National ID Number'] },
 ];
