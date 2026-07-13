@@ -4,8 +4,11 @@ const dotenv = require('dotenv');
 const { PrismaClient } = require('@prisma/client');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
+<<<<<<< HEAD
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
+=======
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
 
 // Validation helpers
 const validateText = (value, fieldName) => {
@@ -118,13 +121,20 @@ const app = express();
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 5000;
 
+<<<<<<< HEAD
 app.use(cookieParser());
 
+=======
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
 // SMTP transporter configuration
 const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: parseInt(process.env.SMTP_PORT) || 587,
+<<<<<<< HEAD
     secure: parseInt(process.env.SMTP_PORT) === 465, // true for 465, false for other ports
+=======
+    secure: process.env.SMTP_PORT === '465', // true for 465, false for other ports
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
     auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
@@ -136,6 +146,7 @@ const transporter = nodemailer.createTransport({
     }
 });
 
+<<<<<<< HEAD
 // Middleware for token validation
 const authenticateToken = (req, res, next) => {
     const token = req.cookies?.auth_token || req.headers['authorization']?.split(' ')[1];
@@ -205,6 +216,8 @@ app.post('/api/auth/logout', (req, res) => {
 });
 
 
+=======
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
 // Memory store for OTPs: Map<email, { otp, expiresAt, verified }>
 const otpStore = new Map();
 
@@ -250,12 +263,16 @@ const sendCredentialsEmail = async (email, username, tempPassword, setupToken) =
     }
 };
 
+<<<<<<< HEAD
 app.use(cors({
     origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
+=======
+app.use(cors());
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
 app.use(express.json());
 
 // Basic route
@@ -475,7 +492,11 @@ app.post('/api/login', async (req, res) => {
             // Log First Login if this is a pending account
             if (flatUser.account_status === 'Pending Password Change') {
                 try {
+<<<<<<< HEAD
                     await prisma.system_logs.create({
+=======
+                    await prisma.systemLog.create({
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
                         data: {
                             event_type: 'Authentication',
                             module_name: 'User Portal',
@@ -491,6 +512,7 @@ app.post('/api/login', async (req, res) => {
                 return res.json({ success: true, requiresPasswordChange: true, user: flatUser });
             }
 
+<<<<<<< HEAD
             const token = jwt.sign(
                 { user_id: flatUser.user_id.toString(), account_type: flatUser.account_type },
                 process.env.JWT_SECRET || 'supersecret123',
@@ -505,6 +527,9 @@ app.post('/api/login', async (req, res) => {
             });
 
             res.json({ success: true, user: flatUser, token });
+=======
+            res.json({ success: true, user: flatUser });
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
         } else {
             console.log('Login query result: Password mismatch');
             res.status(401).json({ success: false, message: 'Invalid credentials' });
@@ -520,8 +545,13 @@ app.post('/api/user/change-password', async (req, res) => {
     const { user_id, current_password, new_password } = req.body;
 
     try {
+<<<<<<< HEAD
         // Find existing user by ID
         const user = await prisma.users.findUnique({
+=======
+        // Find existing user by ID and current password (which is plain text based on the system's simple hashing logic)
+        const user = await prisma.user.findFirst({
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
             where: {
                 user_id: BigInt(user_id)
             }
@@ -531,6 +561,7 @@ app.post('/api/user/change-password', async (req, res) => {
             return res.status(404).json({ success: false, message: 'User not found' });
         }
 
+<<<<<<< HEAD
         // Compare password (support both bcrypt hashes and plain text fallback)
         let isMatch = false;
         if (user.password_hash.startsWith('$2')) {
@@ -541,6 +572,9 @@ app.post('/api/user/change-password', async (req, res) => {
         }
 
         if (!isMatch) {
+=======
+        if (user.password_hash !== current_password) {
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
             return res.status(400).json({ success: false, message: 'Current password is incorrect.' });
         }
 
@@ -548,17 +582,28 @@ app.post('/api/user/change-password', async (req, res) => {
             return res.status(400).json({ success: false, message: 'Password does not meet security requirements.' });
         }
 
+<<<<<<< HEAD
         // Update password and activate account using bcrypt hash
         const bcryptjs = require('bcryptjs');
         const hashedPassword = bcryptjs.hashSync(new_password, 10);
         await prisma.users.update({
             where: { user_id: BigInt(user_id) },
             data: { password_hash: hashedPassword, account_status: 'Active' }
+=======
+        // Update password and activate account
+        await prisma.user.update({
+            where: { user_id: BigInt(user_id) },
+            data: { password_hash: new_password, account_status: 'Active' }
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
         });
 
         // Try to log the event in SystemLog, but don't fail password change if logging fails
         try {
+<<<<<<< HEAD
             await prisma.system_logs.create({
+=======
+            await prisma.systemLog.create({
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
                 data: {
                     event_type: 'Authentication',
                     module_name: 'User Portal',
@@ -571,7 +616,11 @@ app.post('/api/user/change-password', async (req, res) => {
             });
             // If it was pending, log account activated
             if (user.account_status === 'Pending Password Change') {
+<<<<<<< HEAD
                 await prisma.system_logs.create({
+=======
+                await prisma.systemLog.create({
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
                     data: {
                         event_type: 'Authentication',
                         module_name: 'User Portal',
@@ -603,7 +652,11 @@ app.post('/api/forgot-password/send-otp', async (req, res) => {
     console.log(`Email details: ${email}`);
 
     try {
+<<<<<<< HEAD
         const user = await prisma.users.findUnique({
+=======
+        const user = await prisma.user.findUnique({
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
             where: { email }
         });
 
@@ -655,7 +708,11 @@ app.post('/api/forgot-password/send-otp', async (req, res) => {
         
         // Log "Password Reset Requested" event
         try {
+<<<<<<< HEAD
             await prisma.system_logs.create({
+=======
+            await prisma.systemLog.create({
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
                 data: {
                     event_type: 'Authentication',
                     module_name: 'User Portal',
@@ -670,7 +727,11 @@ app.post('/api/forgot-password/send-otp', async (req, res) => {
 
         // Log Code sent event
         try {
+<<<<<<< HEAD
             await prisma.system_logs.create({
+=======
+            await prisma.systemLog.create({
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
                 data: {
                     event_type: 'Authentication',
                     module_name: 'User Portal',
@@ -714,10 +775,17 @@ app.post('/api/forgot-password/verify-otp', async (req, res) => {
         otpStore.set(email, record);
 
         // Fetch user for logging
+<<<<<<< HEAD
         const user = await prisma.users.findUnique({ where: { email } });
         if (user) {
             try {
                 await prisma.system_logs.create({
+=======
+        const user = await prisma.user.findUnique({ where: { email } });
+        if (user) {
+            try {
+                await prisma.systemLog.create({
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
                     data: {
                         event_type: 'Authentication',
                         module_name: 'User Portal',
@@ -749,11 +817,16 @@ app.post('/api/forgot-password/reset-password', async (req, res) => {
         }
 
         // Fetch user to check password
+<<<<<<< HEAD
         const user = await prisma.users.findUnique({ where: { email } });
+=======
+        const user = await prisma.user.findUnique({ where: { email } });
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
         if (!user) {
             return res.status(404).json({ success: false, message: 'User not found.' });
         }
 
+<<<<<<< HEAD
         let isSame = false;
         if (user.password_hash.startsWith('$2')) {
             const bcryptjs = require('bcryptjs');
@@ -763,6 +836,9 @@ app.post('/api/forgot-password/reset-password', async (req, res) => {
         }
 
         if (isSame) {
+=======
+        if (user.password_hash === new_password) {
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
             return res.status(400).json({ success: false, message: 'Cannot be the same as the current password.' });
         }
 
@@ -770,12 +846,19 @@ app.post('/api/forgot-password/reset-password', async (req, res) => {
             return res.status(400).json({ success: false, message: 'Password does not meet security requirements.' });
         }
 
+<<<<<<< HEAD
         // Update password with bcrypt hash
         const bcryptjs = require('bcryptjs');
         const hashedPassword = bcryptjs.hashSync(new_password, 10);
         const updatedUser = await prisma.users.update({
             where: { email },
             data: { password_hash: hashedPassword }
+=======
+        // Update password
+        const updatedUser = await prisma.user.update({
+            where: { email },
+            data: { password_hash: new_password }
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
         });
 
         // Invalidate OTP flow
@@ -783,7 +866,11 @@ app.post('/api/forgot-password/reset-password', async (req, res) => {
 
         // Log completion
         try {
+<<<<<<< HEAD
             await prisma.system_logs.create({
+=======
+            await prisma.systemLog.create({
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
                 data: {
                     event_type: 'Authentication',
                     module_name: 'User Portal',
@@ -838,7 +925,11 @@ app.post('/api/user/setup-password', async (req, res) => {
             return res.status(400).json({ success: false, message: 'This password setup link is no longer valid.' });
         }
 
+<<<<<<< HEAD
         const user = await prisma.users.findFirst({ where: { user_id: BigInt(record.userId) } });
+=======
+        const user = await prisma.user.findFirst({ where: { user_id: BigInt(record.userId) } });
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
         if (!user) {
             return res.status(404).json({ success: false, message: 'User not found.' });
         }
@@ -851,12 +942,19 @@ app.post('/api/user/setup-password', async (req, res) => {
             return res.status(400).json({ success: false, message: 'Password does not meet security requirements.' });
         }
 
+<<<<<<< HEAD
         // Update password and mark active with bcrypt hash
         const bcryptjs = require('bcryptjs');
         const hashedPassword = bcryptjs.hashSync(new_password, 10);
         await prisma.users.update({
             where: { user_id: user.user_id },
             data: { password_hash: hashedPassword, account_status: 'Active' }
+=======
+        // Update password and mark active
+        await prisma.user.update({
+            where: { user_id: user.user_id },
+            data: { password_hash: new_password, account_status: 'Active' }
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
         });
 
         // Mark token as used & invalidate
@@ -865,7 +963,11 @@ app.post('/api/user/setup-password', async (req, res) => {
 
         // Logs
         try {
+<<<<<<< HEAD
             await prisma.system_logs.create({
+=======
+            await prisma.systemLog.create({
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
                 data: {
                     event_type: 'Authentication',
                     module_name: 'User Portal',
@@ -877,7 +979,11 @@ app.post('/api/user/setup-password', async (req, res) => {
                 }
             });
             
+<<<<<<< HEAD
             await prisma.system_logs.create({
+=======
+            await prisma.systemLog.create({
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
                 data: {
                     event_type: 'Authentication',
                     module_name: 'User Portal',
@@ -916,7 +1022,11 @@ app.post('/api/test-email', async (req, res) => {
 });
 
 // Admin Email Diagnostics Endpoint
+<<<<<<< HEAD
 app.post('/api/admin/email-diagnostics/test', authorizeRoles('admin'), async (req, res) => {
+=======
+app.post('/api/admin/email-diagnostics/test', async (req, res) => {
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
     const { email } = req.body;
     try {
         console.log(`[SMTP Diagnostics] 1. Starting SMTP connection test...`);
@@ -1098,7 +1208,11 @@ app.post('/api/admin/register-citizen', authorizeRoles('admin', 'Immigration_Off
 
         console.log(`[Success] Citizen registered successfully with National Number: ${nationalNumber}`);
         try {
+<<<<<<< HEAD
             await prisma.system_logs.create({
+=======
+            await prisma.systemLog.create({
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
                 data: {
                     event_type: 'Registration',
                     module_name: 'Admin System',
@@ -1118,7 +1232,11 @@ app.post('/api/admin/register-citizen', authorizeRoles('admin', 'Immigration_Off
     } catch (error) {
         console.error(`[Failure] Error registering citizen: ${error.message}`);
         try {
+<<<<<<< HEAD
             await prisma.system_logs.create({
+=======
+            await prisma.systemLog.create({
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
                 data: {
                     event_type: 'Registration Error',
                     module_name: 'Admin System',
@@ -1223,7 +1341,11 @@ app.post('/api/admin/register-resident', authorizeRoles('admin', 'Immigration_Of
 
         console.log(`[Success] Resident registered successfully with Residence Number: ${residenceNumber}`);
         try {
+<<<<<<< HEAD
             await prisma.system_logs.create({
+=======
+            await prisma.systemLog.create({
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
                 data: {
                     event_type: 'Registration',
                     module_name: 'Admin System',
@@ -1243,7 +1365,11 @@ app.post('/api/admin/register-resident', authorizeRoles('admin', 'Immigration_Of
     } catch (error) {
         console.error(`[Failure] Error registering resident: ${error.message}`);
         try {
+<<<<<<< HEAD
             await prisma.system_logs.create({
+=======
+            await prisma.systemLog.create({
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
                 data: {
                     event_type: 'Registration Error',
                     module_name: 'Admin System',
@@ -1257,10 +1383,17 @@ app.post('/api/admin/register-resident', authorizeRoles('admin', 'Immigration_Of
 });
 
 // Admin endpoint to resend credentials
+<<<<<<< HEAD
 app.post('/api/admin/resend-credentials', authorizeRoles('admin', 'Immigration_Officer', 'Immigration_Department_Manager'), async (req, res) => {
     const { username } = req.body;
     try {
         const user = await prisma.users.findUnique({
+=======
+app.post('/api/admin/resend-credentials', async (req, res) => {
+    const { username } = req.body;
+    try {
+        const user = await prisma.user.findUnique({
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
             where: { username }
         });
 
@@ -1270,7 +1403,11 @@ app.post('/api/admin/resend-credentials', authorizeRoles('admin', 'Immigration_O
 
         const newPassword = generateTempPassword();
 
+<<<<<<< HEAD
         await prisma.users.update({
+=======
+        await prisma.user.update({
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
             where: { username },
             data: { 
                 password_hash: newPassword,
@@ -1288,7 +1425,11 @@ app.post('/api/admin/resend-credentials', authorizeRoles('admin', 'Immigration_O
         });
         
         try {
+<<<<<<< HEAD
             await prisma.system_logs.create({
+=======
+            await prisma.systemLog.create({
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
                 data: {
                     event_type: 'Authentication',
                     module_name: 'Admin System',
@@ -1305,7 +1446,11 @@ app.post('/api/admin/resend-credentials', authorizeRoles('admin', 'Immigration_O
 
         if (emailSent) {
             try {
+<<<<<<< HEAD
                 await prisma.system_logs.create({
+=======
+                await prisma.systemLog.create({
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
                     data: {
                         event_type: 'Authentication',
                         module_name: 'Admin System',
@@ -1416,7 +1561,11 @@ app.post('/api/admin/issue-id-card', authorizeRoles('admin', 'Immigration_Office
         let finalEmail = citizen ? citizen.email : resident.email;
         
         // Check if user already exists
+<<<<<<< HEAD
         const existingUser = await prisma.users.findUnique({
+=======
+        const existingUser = await prisma.user.findUnique({
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
             where: { username: referenceNumber }
         });
         
@@ -1429,14 +1578,22 @@ app.post('/api/admin/issue-id-card', authorizeRoles('admin', 'Immigration_Office
             }
 
             // Check if email already exists in User table to avoid P2002
+<<<<<<< HEAD
             const existingEmailUser = await prisma.users.findUnique({ where: { email: finalEmail } });
+=======
+            const existingEmailUser = await prisma.user.findUnique({ where: { email: finalEmail } });
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
             if (existingEmailUser) {
                 finalEmail = `${referenceNumber}_${Date.now().toString().slice(-4)}@${idType}.gov.so`;
             }
             
             let newUser;
             try {
+<<<<<<< HEAD
                 newUser = await prisma.users.create({
+=======
+                newUser = await prisma.user.create({
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
                     data: {
                         citizen_id: citizen ? citizen.citizen_id : undefined,
                         resident_id: resident ? resident.resident_id : undefined,
@@ -1454,7 +1611,11 @@ app.post('/api/admin/issue-id-card', authorizeRoles('admin', 'Immigration_Office
             
             if (newUser) {
                 try {
+<<<<<<< HEAD
                     await prisma.system_logs.create({
+=======
+                    await prisma.systemLog.create({
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
                         data: {
                             event_type: 'User Management',
                             module_name: 'Admin System',
@@ -1477,7 +1638,11 @@ app.post('/api/admin/issue-id-card', authorizeRoles('admin', 'Immigration_Office
                 });
                 
                 try {
+<<<<<<< HEAD
                     await prisma.system_logs.create({
+=======
+                    await prisma.systemLog.create({
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
                         data: {
                             event_type: 'Authentication',
                             module_name: 'Admin System',
@@ -1494,7 +1659,11 @@ app.post('/api/admin/issue-id-card', authorizeRoles('admin', 'Immigration_Office
                 
                 if (emailSent) {
                     try {
+<<<<<<< HEAD
                         await prisma.system_logs.create({
+=======
+                        await prisma.systemLog.create({
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
                             data: {
                                 event_type: 'Authentication',
                                 module_name: 'Admin System',
@@ -1517,7 +1686,11 @@ app.post('/api/admin/issue-id-card', authorizeRoles('admin', 'Immigration_Office
             success: true,
             message: `${idType === 'citizen' ? 'National' : 'Residence'} ID Card issued successfully. Sent to Printing Queue.${!existingUser ? ' Account generated and credentials sent.' : ''}`,
             idCard: newIdCard,
+<<<<<<< HEAD
             person: citizens || residents,
+=======
+            person: citizen || resident,
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
             generated_username: generatedUsername,
             generated_password: generatedPassword,
             email_sent: emailSent
@@ -2225,8 +2398,13 @@ app.put('/api/admin/requests/:id', authorizeRoles('admin', 'Immigration_Officer'
         const isIdIssuanceOrRenewal = serviceType === 'ID_RENEWAL' || serviceType === 'NATIONAL_ID' || serviceType === 'NEW_NATIONAL_ID';
 
         if (isApproving && isIdIssuanceOrRenewal) {
+<<<<<<< HEAD
             const applicantName = application.citizens?.full_name || application.residents?.full_name || 'Unknown';
             let docNumber = application.citizens?.national_number || application.residents?.residence_number;
+=======
+            const applicantName = application.citizen?.full_name || application.resident?.full_name || 'Unknown';
+            let docNumber = application.citizen?.national_number || application.resident?.residence_number;
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
             const docType = 'National ID';
             const personIdValue = application.citizen_id || application.resident_id;
             const idType = application.citizen_id ? 'citizen' : 'resident';
@@ -2237,15 +2415,26 @@ app.put('/api/admin/requests/:id', authorizeRoles('admin', 'Immigration_Officer'
                 while (!isUnique) {
                     docNumber = Math.floor(10000000000 + Math.random() * 90000000000).toString();
                     const existing = idType === 'citizen' 
+<<<<<<< HEAD
                         ? await prisma.citizens.findUnique({ where: { national_number: docNumber } })
                         : await prisma.residents.findUnique({ where: { residence_number: docNumber } });
+=======
+                        ? await prisma.citizen.findUnique({ where: { national_number: docNumber } })
+                        : await prisma.resident.findUnique({ where: { residence_number: docNumber } });
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
                     if (!existing) isUnique = true;
                 }
                 
                 if (idType === 'citizen') {
+<<<<<<< HEAD
                     await prisma.citizens.update({ where: { citizen_id: personIdValue }, data: { national_number: docNumber }});
                 } else {
                     await prisma.residents.update({ where: { resident_id: personIdValue }, data: { residence_number: docNumber }});
+=======
+                    await prisma.citizen.update({ where: { citizen_id: personIdValue }, data: { national_number: docNumber }});
+                } else {
+                    await prisma.resident.update({ where: { resident_id: personIdValue }, data: { residence_number: docNumber }});
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
                 }
             }
 
@@ -2256,12 +2445,21 @@ app.put('/api/admin/requests/:id', authorizeRoles('admin', 'Immigration_Officer'
 
             let newIssueNumber = 1;
             if (idType === 'citizen') {
+<<<<<<< HEAD
                 const existingCards = await prisma.citizen_id_cards.findMany({ where: { citizen_id: personIdValue }, orderBy: { issue_date: 'desc' } });
                 if (existingCards.length > 0) {
                     newIssueNumber = existingCards[0].issue_number + 1;
                     await prisma.citizen_id_cards.updateMany({ where: { citizen_id: personIdValue, status: 'active' }, data: { status: 'expired' } });
                 }
                 await prisma.citizen_id_cards.create({
+=======
+                const existingCards = await prisma.citizenIdCard.findMany({ where: { citizen_id: personIdValue }, orderBy: { issue_date: 'desc' } });
+                if (existingCards.length > 0) {
+                    newIssueNumber = existingCards[0].issue_number + 1;
+                    await prisma.citizenIdCard.updateMany({ where: { citizen_id: personIdValue, status: 'active' }, data: { status: 'expired' } });
+                }
+                await prisma.citizenIdCard.create({
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
                     data: {
                         citizen_id: personIdValue,
                         issue_number: newIssueNumber,
@@ -2271,12 +2469,21 @@ app.put('/api/admin/requests/:id', authorizeRoles('admin', 'Immigration_Officer'
                     }
                 });
             } else {
+<<<<<<< HEAD
                 const existingCards = await prisma.resident_id_cards.findMany({ where: { resident_id: personIdValue }, orderBy: { issue_date: 'desc' } });
                 if (existingCards.length > 0) {
                     newIssueNumber = existingCards[0].issue_number + 1;
                     await prisma.resident_id_cards.updateMany({ where: { resident_id: personIdValue, status: 'active' }, data: { status: 'expired' } });
                 }
                 await prisma.resident_id_cards.create({
+=======
+                const existingCards = await prisma.residentIdCard.findMany({ where: { resident_id: personIdValue }, orderBy: { issue_date: 'desc' } });
+                if (existingCards.length > 0) {
+                    newIssueNumber = existingCards[0].issue_number + 1;
+                    await prisma.residentIdCard.updateMany({ where: { resident_id: personIdValue, status: 'active' }, data: { status: 'expired' } });
+                }
+                await prisma.residentIdCard.create({
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
                     data: {
                         resident_id: personIdValue,
                         issue_number: newIssueNumber,
@@ -2288,7 +2495,11 @@ app.put('/api/admin/requests/:id', authorizeRoles('admin', 'Immigration_Officer'
             }
 
             // Move application straight to printing_queue
+<<<<<<< HEAD
             const updated = await prisma.applications.update({
+=======
+            const updated = await prisma.application.update({
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
                 where: { application_id: BigInt(id) },
                 data: {
                     status: 'printing_queue',
@@ -2296,6 +2507,7 @@ app.put('/api/admin/requests/:id', authorizeRoles('admin', 'Immigration_Officer'
                 }
             });
 
+<<<<<<< HEAD
             const existingPrintQueue2 = await prisma.print_queue.findFirst({
                 where: { request_number: id.toString() }
             });
@@ -2310,6 +2522,17 @@ app.put('/api/admin/requests/:id', authorizeRoles('admin', 'Immigration_Officer'
                     }
                 });
             }
+=======
+            await prisma.printQueue.create({
+                data: {
+                    document_type: docType,
+                    document_number: docNumber,
+                    applicant_name: applicantName,
+                    request_number: id.toString(),
+                    status: 'pending'
+                }
+            });
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
 
             await prisma.revenue.create({
                 data: {

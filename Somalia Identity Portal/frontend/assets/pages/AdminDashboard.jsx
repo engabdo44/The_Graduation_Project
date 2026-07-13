@@ -4029,6 +4029,7 @@ const EmailDiagnostics = () => {
     );
 };
 
+<<<<<<< HEAD
 // --- RoleRoute guard for admin subroutes ---
 const RoleRoute = ({ element, allowed }) => {
     const u = localStorage.getItem('user');
@@ -4039,6 +4040,8 @@ const RoleRoute = ({ element, allowed }) => {
     return element;
 };
 
+=======
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
 // --- Main Admin Dashboard ---
 const AdminDashboard = () => {
     const { t, dir, language, setLanguage } = useLanguage();
@@ -4176,6 +4179,7 @@ const AdminDashboard = () => {
                 <main className="p-8 md:p-10 overflow-y-auto">
                     <Routes>
                         <Route path="/" element={<DashboardOverview />} />
+<<<<<<< HEAD
                         <Route path="/requests" element={<RoleRoute element={<RequestsApproval />} allowed={['admin', 'Immigration_Officer', 'Immigration_Department_Manager']} />} />
                         <Route path="/passports" element={<RoleRoute element={<PassportIssuance />} allowed={['admin', 'Immigration_Officer']} />} />
                         <Route path="/register" element={<RoleRoute element={<CitizenRegistration />} allowed={['admin', 'Immigration_Department_Manager']} />} />
@@ -4194,6 +4198,26 @@ const AdminDashboard = () => {
                         <Route path="/logs" element={<RoleRoute element={<ActivityLogs />} allowed={['admin']} />} />
                         <Route path="/users" element={<RoleRoute element={<UserManagement />} allowed={['admin']} />} />
                         <Route path="/email-diagnostics" element={<RoleRoute element={<EmailDiagnostics />} allowed={['admin']} />} />
+=======
+                        <Route path="/requests" element={<RequestsApproval />} />
+                        <Route path="/passports" element={<PassportIssuance />} />
+                        <Route path="/register" element={<CitizenRegistration />} />
+                        <Route path="/register-resident" element={<ResidentRegistration />} />
+                        <Route path="/issue-id" element={<IssueIDCard />} />
+                        <Route path="/renew-id" element={<IdentityRenewal />} />
+                        <Route path="/renew-passport" element={<PassportRenewal />} />
+                        <Route path="/search-id" element={<IdentitySearch />} />
+                        <Route path="/search-passport" element={<PassportSearch />} />
+                        <Route path="/birth-certificates" element={<BirthCertificateServices dir={dir} lang={language} />} />
+                        <Route path="/print-id" element={<PrintIdentity />} />
+                        <Route path="/print-passport" element={<PrintPassport />} />
+                        <Route path="/printing-queue" element={<PrintingQueue />} />
+                        <Route path="/printing-history" element={<PrintingHistory />} />
+                        <Route path="/revenue" element={<RevenueDashboard />} />
+                        <Route path="/logs" element={<ActivityLogs />} />
+                        <Route path="/users" element={<UserManagement />} />
+                        <Route path="/email-diagnostics" element={<EmailDiagnostics />} />
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
                         <Route path="/profile" element={<AdminProfile />} />
                         {/* ─── Reports Routes ─── */}
                         <Route path="/reports/national-id" element={<RoleRoute element={<NationalIDReport />} allowed={['admin']} />} />

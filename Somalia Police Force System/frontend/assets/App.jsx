@@ -30,6 +30,7 @@ const INITIAL_CITIZENS = [{
   }]
 }];
 const App = () => {
+<<<<<<< HEAD
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem('spf_user');
     return saved ? JSON.parse(saved) : null;
@@ -55,6 +56,13 @@ const App = () => {
   useEffect(() => {
     localStorage.setItem('spf_activeTab', activeTab);
   }, [activeTab]);
+=======
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [user, setUser] = useState(null);
+  const [lang, setLang] = useState(() => localStorage.getItem('spf_lang') || 'en');
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [citizens, setCitizens] = useState(INITIAL_CITIZENS);
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
   const [dashboardData, setDashboardData] = useState(null);
   const [showLangMenu, setShowLangMenu] = useState(false);
   const isInitialMount = React.useRef(true);

@@ -201,9 +201,12 @@ model citizens {
   families       families[]
   family_members family_members[]
 
+<<<<<<< HEAD
   birth_certificate_id BigInt?             @unique @db.UnsignedBigInt
   birth_certificate    birth_certificates? @relation(fields: [birth_certificate_id], references: [birth_id], onDelete: SetNull)
 
+=======
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
   @@map("citizens")
 }
 
@@ -530,7 +533,10 @@ model birth_certificates {
   created_at     DateTime @default(now()) @db.DateTime(0)
 
   requests certificate_requests[]
+<<<<<<< HEAD
   citizen  citizens?
+=======
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
 }
 
 model death_certificates {

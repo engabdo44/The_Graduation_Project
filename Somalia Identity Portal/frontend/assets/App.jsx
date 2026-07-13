@@ -68,6 +68,7 @@ const App = () => {
 
                             {/* Public Protected Routes */}
                             <Route path="*" element={
+<<<<<<< HEAD
                                 <ProtectedRoute allowedRoles={['admin', 'Printing_Officer', 'Immigration_Officer', 'Immigration_Department_Manager', 'citizen', 'resident']}>
                                     <>
                                         <Header />
@@ -80,6 +81,19 @@ const App = () => {
                                                 <Route path="/criminal-certificate" element={<CriminalCertificate />} />
                                                 <Route path="/birth-certificate-pdf" element={<BirthCertificatePDF />} />
                                                 <Route path="/change-password" element={<ChangePassword />} />
+=======
+                                <>
+                                    <Header />
+                                    <main className="flex-grow">
+                                        <Routes>
+                                            <Route path="/home" element={<Home />} />
+                                            <Route path="/profile" element={<Profile />} />
+                                            <Route path="/notifications" element={<Notifications />} />
+                                            <Route path="/requests" element={<RequestsHistory />} />
+                                            <Route path="/criminal-certificate" element={<CriminalCertificate />} />
+                                            <Route path="/birth-certificate-pdf" element={<BirthCertificatePDF />} />
+                                            <Route path="/change-password" element={<ChangePassword />} />
+>>>>>>> 4947b7bbaec0583c251108c81b38ddc676e71bd5
 
                                                 <Route path="/services" element={<ServicesCatalog />} />
                                                 <Route path="/service/:id" element={<ServiceDetail />} />
