@@ -62,7 +62,7 @@ const CitizenSearch = ({
           date: new Date(r.incident_date).toISOString().split('T')[0],
           type: r.crime_type,
           severity: r.severity || CrimeSeverity.MEDIUM, // Default if not in DB
-          description: r.court_decision || 'No details available',
+          description: r.crime_details || 'No details available',
           status: r.status
         }))
       };

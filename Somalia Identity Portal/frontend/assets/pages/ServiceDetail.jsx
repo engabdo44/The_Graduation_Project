@@ -73,6 +73,8 @@ const ServiceDetail = () => {
                                 onClick={() => {
                                     if (id === 'criminal-record') {
                                         navigate('/criminal-certificate');
+                                    } else if (id === 'birth-cert-pdf') {
+                                        navigate('/birth-certificate-pdf');
                                     } else {
                                         navigate(`/apply/${id}`);
                                     }

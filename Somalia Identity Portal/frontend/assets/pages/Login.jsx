@@ -45,6 +45,12 @@ const Login = () => {
                 // Store user data in localStorage
                 localStorage.setItem('user', JSON.stringify(data.user));
 
+                if (data.requiresPasswordChange) {
+                    alert(t.requiresPasswordChange || 'You must change your password on first login.');
+                    navigate('/change-password');
+                    return;
+                }
+
                 const adminRoles = ['Printing_Officer', 'Immigration_Officer', 'Immigration_Department_Manager', 'admin'];
                 if (adminRoles.includes(data.user.account_type)) {
                     navigate('/admin');
@@ -154,13 +160,15 @@ const Login = () => {
                         <div className="space-y-2 group">
                             <div className="flex justify-between items-center ml-1 mr-1">
                                 <label className="text-sm font-bold text-gray-700 group-focus-within:text-primary-600 transition-colors">{t.password}</label>
-                                <Link to="/forgot-password" className="text-xs font-bold text-primary-600 hover:text-primary-800 transition">{t.forgotPassword}</Link>
                             </div>
                             <div className="relative">
                                 <div className="absolute ltr:left-0 rtl:right-0 top-0 bottom-0 w-14 flex items-center justify-center z-10">
                                     <Lock className="text-gray-400 group-focus-within:text-primary-500 transition-colors" size={22} />
                                 </div>
                                 <input type="password" className="w-full ltr:pl-14 rtl:pr-14 py-4 rounded-2xl border border-gray-200 bg-gray-50/50 focus:bg-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 outline-none transition-all duration-300 font-semibold text-gray-900" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} />
+                            </div>
+                            <div className="flex justify-end mt-2">
+                                <Link to="/forgot-password" className="text-sm font-bold text-primary-600 hover:text-primary-800 transition">{t.forgotPassword}</Link>
                             </div>
                         </div>
 
@@ -170,12 +178,7 @@ const Login = () => {
                         </button>
                     </form>
 
-                    <div className="text-center">
-                        <p className="text-gray-600 font-medium">
-                            {t.dontHaveAccount}
-                            <Link to="/signup" className="font-bold text-primary-700 hover:text-primary-950 mx-2 transition">{t.createAccount}</Link>
-                        </p>
-                    </div>
+
                 </div>
             </div>
         </div>

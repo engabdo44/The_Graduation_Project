@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Globe, Menu, X, ChevronDown, UserCircle, Moon, Sun, CreditCard, Plane, LogOut, User, LayoutGrid, Check, Bell, History } from 'lucide-react';
+import { Globe, Menu, X, ChevronDown, UserCircle, Moon, Sun, CreditCard, Plane, LogOut, User, LayoutGrid, Check, Bell, History, Lock } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useLanguage } from '../LanguageContext';
 import { useTheme } from '../ThemeContext';
@@ -296,6 +296,10 @@ const Header = () => {
                                 <Link to="/requests" className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-primary-600 hover:text-white dark:hover:bg-primary-600 dark:hover:text-white rounded-xl text-[13px] font-bold text-gray-800 dark:text-white transition-all group/hist">
                                     <History size={18} className="text-primary-600 dark:text-gold-500 group-hover:text-white transition-colors" />
                                     {t.myRequests}
+                                </Link>
+                                <Link to="/change-password" className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-primary-600 hover:text-white dark:hover:bg-primary-600 dark:hover:text-white rounded-xl text-[13px] font-bold text-gray-800 dark:text-white transition-all group/pass">
+                                    <Lock size={18} className="text-primary-600 dark:text-gold-500 group-hover:text-white transition-colors" />
+                                    {dir === 'rtl' ? 'تغيير كلمة المرور' : 'Change Password'}
                                 </Link>
                                 <hr className="border-gray-50 dark:border-white/5 my-2" />
                                 <button

@@ -63,6 +63,7 @@ const AdminSidebar = ({ isOpen, setIsOpen, pendingCount = 0 }) => {
         { path: '/admin/revenue', label: dir === 'rtl' ? 'لوحة الإيرادات' : 'Revenue Dashboard', icon: BarChart2 },
         { path: '/admin/logs', label: dir === 'rtl' ? 'سجلات النظام' : 'Activity Logs', icon: ScrollText },
         { path: '/admin/users', label: 'User Management', icon: Users },
+        { path: '/admin/email-diagnostics', label: 'Email Diagnostics', icon: Send },
         { path: '/admin/profile', label: t.sideStaffProfile, icon: Briefcase },
     ];
 
@@ -1300,15 +1301,18 @@ const CitizenRegistration = () => {
 
     const handleFormSubmit = (e) => {
         e.preventDefault();
+        console.log('[Dev Debug] Citizen Registration review page loaded');
         setStep(2);
     };
 
     const confirmSubmit = async () => {
+        console.log('[Dev Debug] Citizen Registration Confirm button clicked');
         setLoading(true);
         setError(null);
         setSuccessData(null);
 
         try {
+            console.log('[Dev Debug] Sending API request to /api/admin/register-citizen', formData);
             const response = await fetch('http://localhost:5000/api/admin/register-citizen', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1316,8 +1320,10 @@ const CitizenRegistration = () => {
             });
 
             const data = await response.json();
+            console.log('[Dev Debug] API response received for Citizen Registration:', data);
 
             if (data.success) {
+                console.log('[Dev Debug] Database insert success: Citizen saved.', data.citizen);
                 setSuccessData(data.citizen);
                 // clear form
                 setFormData({
@@ -1325,9 +1331,11 @@ const CitizenRegistration = () => {
                 });
                 setStep(1);
             } else {
+                console.error('[Dev Debug] Database insert failure / Validation error:', data.message);
                 setError(data.message || 'Error saving citizen.');
             }
         } catch (err) {
+            console.error('[Dev Debug] Client network error or server unavailable:', err);
             setError('Server connection error. Is the backend running?');
         } finally {
             setLoading(false);
@@ -1363,13 +1371,9 @@ const CitizenRegistration = () => {
                                         <span className="text-[10px] font-black text-gray-500 uppercase">National ID (11 Digits):</span>
                                         <span className="text-sm font-black text-gray-900 dark:text-gold-400 font-mono tracking-widest">{successData.national_number}</span>
                                     </div>
-                                    <div className="flex justify-between border-b border-gray-100 dark:border-white/5 pb-2">
-                                        <span className="text-[10px] font-black text-gray-500 uppercase">System Username:</span>
-                                        <span className="text-sm font-bold text-gray-900 dark:text-white">{successData.generated_username}</span>
-                                    </div>
                                     <div className="flex justify-between">
-                                        <span className="text-[10px] font-black text-gray-500 uppercase">Temporary Password:</span>
-                                        <span className="text-sm font-bold text-gray-900 dark:text-white font-mono">{successData.generated_password}</span>
+                                        <span className="text-[10px] font-black text-gray-500 uppercase">Account Setup:</span>
+                                        <span className="text-sm font-bold text-gray-900 dark:text-white">Credentials will be generated upon ID Card Issuance</span>
                                     </div>
                                 </div>
                                 <button onClick={() => setSuccessData(null)} className="mt-8 bg-green-600 hover:bg-green-700 text-white px-8 py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all shadow-md">
@@ -1379,6 +1383,11 @@ const CitizenRegistration = () => {
                         </div>
                     ) : step === 2 ? (
                         <div className="space-y-8 animate-fade-in max-w-lg mx-auto bg-gray-50/50 dark:bg-white/5 p-8 rounded-2xl border border-gray-200 dark:border-white/5">
+                            {error && (
+                                <div className="p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl text-xs font-bold flex items-center gap-3">
+                                    <AlertCircle size={16} /> {error}
+                                </div>
+                            )}
                             <h3 className="text-xl font-black text-gray-900 dark:text-white mb-4 text-center">Review Citizen Details</h3>
                             
                             <div className="space-y-4">
@@ -1522,15 +1531,18 @@ const ResidentRegistration = () => {
 
     const handleFormSubmit = (e) => {
         e.preventDefault();
+        console.log('[Dev Debug] Resident Registration review page loaded');
         setStep(2);
     };
 
     const confirmSubmit = async () => {
+        console.log('[Dev Debug] Resident Registration Confirm button clicked');
         setLoading(true);
         setError(null);
         setSuccessData(null);
 
         try {
+            console.log('[Dev Debug] Sending API request to /api/admin/register-resident', formData);
             const response = await fetch('http://localhost:5000/api/admin/register-resident', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1538,17 +1550,21 @@ const ResidentRegistration = () => {
             });
 
             const data = await response.json();
+            console.log('[Dev Debug] API response received for Resident Registration:', data);
 
             if (data.success) {
+                console.log('[Dev Debug] Database insert success: Resident saved.', data.resident);
                 setSuccessData(data.resident);
                 setFormData({
                     fullName: '', dob: '', gender: 'male', nationality: '', passportNumber: '', visaType: '', sponsorName: '', phone: '', responsiblePersonPhone: '', email: '', address: '', personal_photo: ''
                 });
                 setStep(1);
             } else {
+                console.error('[Dev Debug] Database insert failure / Validation error:', data.message);
                 setError(data.message || 'Error saving resident.');
             }
         } catch (err) {
+            console.error('[Dev Debug] Client network error or server unavailable:', err);
             setError('Server connection error. Is the backend running?');
         } finally {
             setLoading(false);
@@ -1584,13 +1600,9 @@ const ResidentRegistration = () => {
                                         <span className="text-[10px] font-black text-gray-500 uppercase">Residence No. (11 Digits):</span>
                                         <span className="text-sm font-black text-gray-900 dark:text-gold-400 font-mono tracking-widest">{successData.residence_number}</span>
                                     </div>
-                                    <div className="flex justify-between border-b border-gray-100 dark:border-white/5 pb-2">
-                                        <span className="text-[10px] font-black text-gray-500 uppercase">System Username:</span>
-                                        <span className="text-sm font-bold text-gray-900 dark:text-white">{successData.generated_username}</span>
-                                    </div>
                                     <div className="flex justify-between">
-                                        <span className="text-[10px] font-black text-gray-500 uppercase">Temporary Password:</span>
-                                        <span className="text-sm font-bold text-gray-900 dark:text-white font-mono">{successData.generated_password}</span>
+                                        <span className="text-[10px] font-black text-gray-500 uppercase">Account Setup:</span>
+                                        <span className="text-sm font-bold text-gray-900 dark:text-white">Credentials will be generated upon ID Card Issuance</span>
                                     </div>
                                 </div>
                                 <button onClick={() => setSuccessData(null)} className="mt-8 bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all shadow-md">
@@ -1600,6 +1612,11 @@ const ResidentRegistration = () => {
                         </div>
                     ) : step === 2 ? (
                         <div className="space-y-8 animate-fade-in max-w-lg mx-auto bg-gray-50/50 dark:bg-white/5 p-8 rounded-2xl border border-gray-200 dark:border-white/5">
+                            {error && (
+                                <div className="p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl text-xs font-bold flex items-center gap-3">
+                                    <AlertCircle size={16} /> {error}
+                                </div>
+                            )}
                             <h3 className="text-xl font-black text-gray-900 dark:text-white mb-4 text-center">Review Resident Details</h3>
                             
                             <div className="space-y-4">
@@ -1785,6 +1802,8 @@ const IssueIDCard = () => {
                     message: data.message
                 });
                 setReferenceNumber(''); // clear form
+                setPersonalPhoto(''); // clear photo
+                setStep(1); // Reset to step 1 for the next issuance
             } else {
                 setError(data.message || 'Error processing ID card.');
             }
@@ -3510,6 +3529,25 @@ const UserManagement = () => {
         }
     };
 
+    const resendCredentials = async (username) => {
+        if (!confirm(dir === 'rtl' ? 'هل أنت متأكد من إعادة إرسال بيانات الدخول؟' : 'Are you sure you want to resend credentials? This will generate a new password.')) return;
+        try {
+            const res = await fetch('http://localhost:5000/api/admin/resend-credentials', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username })
+            });
+            const data = await res.json();
+            if (data.success) {
+                alert(dir === 'rtl' ? 'تم الرسال بنجاح' : 'Credentials regenerated and email sent successfully.');
+            } else {
+                alert(data.message || 'Failed to resend credentials.');
+            }
+        } catch(e) {
+            alert('Error communicating with server.');
+        }
+    };
+
     return (
         <div className="max-w-7xl mx-auto space-y-6">
             <h2 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-widest">{dir === 'rtl' ? 'إدارة المستخدمين' : 'User Management'}</h2>
@@ -3536,13 +3574,15 @@ const UserManagement = () => {
                                             {u.is_active ? 'Active' : 'Disabled'}
                                         </span>
                                     </td>
-                                    <td className="py-4">
+                                    <td className="py-4 flex gap-2">
                                         <button onClick={() => {
                                             setEditUser(u);
                                             setAccountType(u.account_type);
                                             setIsActive(u.is_active);
                                             setPassword('');
                                         }} className="px-4 py-1.5 bg-primary-100 text-primary-700 hover:bg-primary-200 dark:bg-primary-900/30 dark:text-primary-400 dark:hover:bg-primary-900/50 rounded-lg text-xs transition-all">Edit</button>
+                                        
+                                        <button onClick={() => resendCredentials(u.username)} className="flex items-center gap-1 px-3 py-1.5 bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50 rounded-lg text-xs transition-all"><Send size={12} /> Resend Credentials</button>
                                     </td>
                                 </tr>
                             ))}
@@ -3911,6 +3951,80 @@ const ActivityLogs = () => {
     );
 };
 
+// --- Sub-component: EmailDiagnostics ---
+const EmailDiagnostics = () => {
+    const { dir } = useLanguage();
+    const [testEmail, setTestEmail] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [result, setResult] = useState(null);
+
+    const handleTest = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        setResult(null);
+        try {
+            const res = await fetch('http://localhost:5000/api/admin/email-diagnostics/test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: testEmail })
+            });
+            const data = await res.json();
+            setResult(data);
+        } catch (err) {
+            setResult({ success: false, message: 'Server connection error.', error: err.message, diagnosticLogs: [] });
+        }
+        setLoading(false);
+    };
+
+    return (
+        <div className="max-w-4xl mx-auto space-y-6">
+            <h2 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-widest">Email Diagnostics</h2>
+            
+            <div className="bg-white dark:bg-[#020617] border border-gray-200 dark:border-white/5 rounded-2xl p-8 flex flex-col gap-6 shadow-sm">
+                <form onSubmit={handleTest} className="flex gap-4 items-end">
+                    <div className="flex-1 space-y-2">
+                        <label className="text-xs font-black text-gray-400 uppercase tracking-widest">Send Test Email To</label>
+                        <input required type="email" value={testEmail} onChange={e => setTestEmail(e.target.value)} placeholder="admin@example.com" className="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-gray-900 dark:text-white outline-none focus:border-primary-500" />
+                    </div>
+                    <button disabled={loading || !testEmail} type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all shadow-md disabled:opacity-50 flex items-center gap-2">
+                        <Send size={16} />
+                        {loading ? 'Testing Server...' : 'Send Test Email'}
+                    </button>
+                </form>
+
+                {result && (
+                    <div className={`p-6 rounded-xl border ${result.success ? 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-500/20' : 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-500/20'} animate-fade-in`}>
+                        <div className="flex items-center gap-3 mb-4">
+                            {result.success ? <CheckCircle2 className="text-green-500" /> : <ShieldAlert className="text-red-500" />}
+                            <h3 className={`text-lg font-black ${result.success ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>
+                                {result.message}
+                            </h3>
+                        </div>
+                        {result.error && (
+                            <div className="mb-4 p-4 bg-white dark:bg-black/30 rounded-lg text-xs font-mono text-red-600 dark:text-red-400 overflow-x-auto">
+                                <strong>Exact SMTP Error: </strong> {result.error}
+                            </div>
+                        )}
+                        {result.diagnosticLogs && result.diagnosticLogs.length > 0 && (
+                            <div>
+                                <h4 className="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 border-b border-gray-200 dark:border-white/10 pb-2">Diagnostic Timeline</h4>
+                                <ul className="space-y-2 mt-4 font-mono text-xs">
+                                    {result.diagnosticLogs.map((log, i) => (
+                                        <li key={i} className="flex gap-3 text-gray-600 dark:text-gray-300 items-start">
+                                            <span className="text-primary-500">[{new Date().toLocaleTimeString()}]</span> 
+                                            <span>{log}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
 // --- Main Admin Dashboard ---
 const AdminDashboard = () => {
     const { t, dir, language, setLanguage } = useLanguage();
@@ -4047,6 +4161,7 @@ const AdminDashboard = () => {
                         <Route path="/revenue" element={<RevenueDashboard />} />
                         <Route path="/logs" element={<ActivityLogs />} />
                         <Route path="/users" element={<UserManagement />} />
+                        <Route path="/email-diagnostics" element={<EmailDiagnostics />} />
                         <Route path="/profile" element={<AdminProfile />} />
                         {/* ─── Reports Routes ─── */}
                         <Route path="/reports/national-id" element={<NationalIDReport />} />

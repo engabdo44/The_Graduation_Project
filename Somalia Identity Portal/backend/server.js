@@ -2,15 +2,17 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const { PrismaClient } = require('@prisma/client');
+const nodemailer = require('nodemailer');
+const crypto = require('crypto');
 
 // Validation helpers
 const validateText = (value, fieldName) => {
   if (!value || value.trim() === '') {
     throw new Error(`${fieldName} is required`);
   }
-  const textRegex = /^[a-zA-Z\u0600-\u06FF\u0750-\u077F\s\-'\.]+$/;
+  const textRegex = /^[a-zA-Z\u0600-\u06FF\u0750-\u077F\s\-'\.,0-9]+$/;
   if (!textRegex.test(value)) {
-    throw new Error(`${fieldName} should only contain letters`);
+    throw new Error(`${fieldName} contains invalid characters`);
   }
   if (value.length > 200) {
     throw new Error(`${fieldName} is too long (max 200 characters)`);
@@ -63,6 +65,32 @@ const validateEmail = (value, fieldName) => {
   }
 };
 
+const validateStrongPassword = (pass) => {
+    if (!pass || pass.length < 8) return false;
+    if (!/[A-Z]/.test(pass)) return false;
+    if (!/[a-z]/.test(pass)) return false;
+    if (!/[0-9]/.test(pass)) return false;
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]+/.test(pass)) return false;
+    return true;
+};
+
+const generateTempPassword = () => {
+    const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const lower = 'abcdefghijklmnopqrstuvwxyz';
+    const nums = '0123456789';
+    const spec = '!@#$%^&*()_+-=[]{};:|,.<>/?';
+    let pass = '';
+    pass += upper[Math.floor(Math.random() * upper.length)];
+    pass += lower[Math.floor(Math.random() * lower.length)];
+    pass += nums[Math.floor(Math.random() * nums.length)];
+    pass += spec[Math.floor(Math.random() * spec.length)];
+    const all = upper + lower + nums + spec;
+    for(let i = 0; i < 4; i++) {
+        pass += all[Math.floor(Math.random() * all.length)];
+    }
+    return pass.split('').sort(() => 0.5 - Math.random()).join('');
+};
+
 const validatePhone = (value, fieldName) => {
   if (!value || value.trim() === '') {
     throw new Error(`${fieldName} is required`);
@@ -87,6 +115,67 @@ BigInt.prototype.toJSON = function () {
 const app = express();
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 5000;
+
+// SMTP transporter configuration
+const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT) || 587,
+    secure: process.env.SMTP_PORT === '465', // true for 465, false for other ports
+    auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+    },
+    logger: true,
+    debug: true,
+    tls: {
+       rejectUnauthorized: false
+    }
+});
+
+// Memory store for OTPs: Map<email, { otp, expiresAt, verified }>
+const otpStore = new Map();
+
+// Memory store for Password Setup Tokens: Map<token, { userId, username, email, expiresAt, used }>
+const setupTokenStore = new Map();
+
+// Helper to send credentials email
+const sendCredentialsEmail = async (email, username, tempPassword, setupToken) => {
+    if (!email) return false;
+    const mailOptions = {
+        from: process.env.SMTP_FROM || 'noreply@egovernment.gov.so',
+        to: email,
+        subject: 'Welcome to the E-Government Portal - Your Account Details',
+        html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 10px;">
+                <h2 style="color: #1e3a8a; text-align: center;">E-Government Portal</h2>
+                <p style="color: #374151; font-size: 16px;">Welcome to the E-Government Portal. Your new account has been successfully created.</p>
+                <div style="margin: 20px 0; background: #f9fafb; padding: 15px; border-radius: 8px;">
+                    <p style="margin: 5px 0;"><strong>Username:</strong> ${username}</p>
+                    <p style="margin: 5px 0;"><strong>Temporary Password:</strong> ${tempPassword}</p>
+                </div>
+                <p style="color: #374151; font-size: 16px;">For your security, you must set a permanent password before accessing your account.</p>
+                <div style="text-align: center; margin: 30px 0;">
+                    <a href="http://localhost:5173/set-password?token=${setupToken}" style="background-color: #1d4ed8; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Set Up Your Password</a>
+                </div>
+                <p style="color: #6b7280; font-size: 14px; text-align: center;">This secure link will expire in 24 hours.</p>
+                <div style="text-align: center; margin-top: 15px;">
+                    <a href="http://localhost:5173/" style="color: #1d4ed8; font-size: 14px; text-decoration: none;">Go to Portal Login</a>
+                </div>
+                <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;" />
+                <p style="color: #9ca3af; font-size: 12px; text-align: center;">If you need assistance, please contact the support team or visit your nearest branch.</p>
+            </div>
+        `
+    };
+    try {
+        console.log(`[SMTP] Attempting to send credentials email to: ${email}`);
+        const info = await transporter.sendMail(mailOptions);
+        console.log(`[SMTP] Email sent successfully to ${email}. Message ID: ${info.messageId}`);
+        return true;
+    } catch (err) {
+        console.error('[SMTP] Failed to send credentials email:', err.message);
+        return false;
+    }
+};
 
 app.use(cors());
 app.use(express.json());
@@ -294,6 +383,25 @@ app.post('/api/login', async (req, res) => {
                 ...userRest
             };
 
+            // Log First Login if this is a pending account
+            if (flatUser.account_status === 'Pending Password Change') {
+                try {
+                    await prisma.systemLog.create({
+                        data: {
+                            event_type: 'Authentication',
+                            module_name: 'User Portal',
+                            description: 'Action: First Login',
+                            user_id: user.user_id.toString(),
+                            username: user.username,
+                            account_type: user.account_type,
+                            created_at: new Date()
+                        }
+                    });
+                } catch (logErr) {}
+                
+                return res.json({ success: true, requiresPasswordChange: true, user: flatUser });
+            }
+
             res.json({ success: true, user: flatUser });
         } else {
             res.status(401).json({ success: false, message: 'Invalid credentials' });
@@ -304,11 +412,426 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
+// Change Password Endpoint
+app.post('/api/user/change-password', async (req, res) => {
+    const { user_id, current_password, new_password } = req.body;
+
+    try {
+        // Find existing user by ID and current password (which is plain text based on the system's simple hashing logic)
+        const user = await prisma.user.findFirst({
+            where: {
+                user_id: BigInt(user_id)
+            }
+        });
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'User not found' });
+        }
+
+        if (user.password_hash !== current_password) {
+            return res.status(400).json({ success: false, message: 'Current password is incorrect.' });
+        }
+
+        if (!validateStrongPassword(new_password)) {
+            return res.status(400).json({ success: false, message: 'Password does not meet security requirements.' });
+        }
+
+        // Update password and activate account
+        await prisma.user.update({
+            where: { user_id: BigInt(user_id) },
+            data: { password_hash: new_password, account_status: 'Active' }
+        });
+
+        // Try to log the event in SystemLog, but don't fail password change if logging fails
+        try {
+            await prisma.systemLog.create({
+                data: {
+                    event_type: 'Authentication',
+                    module_name: 'User Portal',
+                    description: 'Action: Password Changed',
+                    user_id: user_id.toString(),
+                    username: user.username,
+                    account_type: user.account_type,
+                    created_at: new Date()
+                }
+            });
+            // If it was pending, log account activated
+            if (user.account_status === 'Pending Password Change') {
+                await prisma.systemLog.create({
+                    data: {
+                        event_type: 'Authentication',
+                        module_name: 'User Portal',
+                        description: 'Action: Account Activated',
+                        user_id: user_id.toString(),
+                        username: user.username,
+                        account_type: user.account_type,
+                        created_at: new Date()
+                    }
+                });
+            }
+        } catch (logErr) {
+            console.error('Failed to write activity log:', logErr.message);
+        }
+
+        res.json({ success: true, message: 'Password changed successfully.' });
+    } catch (err) {
+        console.error('Error changing password:', err);
+        res.status(500).json({ success: false, message: 'Internal server error while changing password.' });
+    }
+});
+
+// -- FORGOT PASSWORD WORKFLOW --
+
+// 1. Send OTP
+app.post('/api/forgot-password/send-otp', async (req, res) => {
+    const { email } = req.body;
+    console.log(`\n--- Forgot password request received ---`);
+    console.log(`Email details: ${email}`);
+
+    try {
+        const user = await prisma.user.findUnique({
+            where: { email }
+        });
+
+        if (!user) {
+            console.log(`Email NOT found in database: ${email}`);
+            return res.status(404).json({ success: false, message: 'This email is not registered in our system.' });
+        }
+
+        console.log(`Email found in database: ${email} (User ID: ${user.user_id})`);
+
+        // Generate 6-digit OTP
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        console.log(`OTP generated successfully.`);
+
+        // Setup email options
+        const mailOptions = {
+            from: process.env.SMTP_FROM || 'noreply@egovernment.gov.so',
+            to: email,
+            subject: 'Your Password Reset Verification Code',
+            html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 10px;">
+                    <h2 style="color: #1e3a8a; text-align: center;">E-Government Portal</h2>
+                    <p style="color: #374151; font-size: 16px;">Hello ${user.username},</p>
+                    <p style="color: #374151; font-size: 16px;">We received a request to reset your password. Use the verification code below to proceed:</p>
+                    <div style="text-align: center; margin: 30px 0;">
+                        <span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #1d4ed8; background: #eff6ff; padding: 10px 30px; border-radius: 8px;">${otp}</span>
+                    </div>
+                    <p style="color: #6b7280; font-size: 14px;">This code will expire in 10 minutes. If you did not request a password reset, please ignore this email.</p>
+                </div>
+            `
+        };
+
+        try {
+            console.log(`[SMTP] OTP Email send attempted to ${email}`);
+            const info = await transporter.sendMail(mailOptions);
+            console.log(`[SMTP] OTP Email send success to ${email}. Message ID: ${info.messageId}`);
+        } catch (emailErr) {
+            console.error(`[SMTP] OTP Email send failure:`, emailErr);
+            console.error(`[SMTP] Exact SMTP error details: ${emailErr.message}`);
+            return res.status(500).json({ success: false, message: 'Email delivery failed. Please contact the system administrator.' });
+        }
+
+        // Store OTP with 10 mins expiry
+        otpStore.set(email, { 
+            otp, 
+            expiresAt: Date.now() + 10 * 60 * 1000,
+            verified: false 
+        });
+        
+        // Log "Password Reset Requested" event
+        try {
+            await prisma.systemLog.create({
+                data: {
+                    event_type: 'Authentication',
+                    module_name: 'User Portal',
+                    description: 'Action: Password Reset Requested',
+                    user_id: user.user_id.toString(),
+                    username: user.username,
+                    account_type: user.account_type,
+                    created_at: new Date()
+                }
+            });
+        } catch (logErr) { console.error('Failed to log reset request:', logErr.message); }
+
+        // Log Code sent event
+        try {
+            await prisma.systemLog.create({
+                data: {
+                    event_type: 'Authentication',
+                    module_name: 'User Portal',
+                    description: 'Action: Verification Code Sent',
+                    user_id: user.user_id.toString(),
+                    username: user.username,
+                    account_type: user.account_type,
+                    created_at: new Date()
+                }
+            });
+        } catch (logErr) { console.error('Failed to log code sent:', logErr.message); }
+
+        res.json({ success: true, message: 'A verification code has been sent to your email address.' });
+    } catch (err) {
+        console.error('Error in send-otp process:', err);
+        res.status(500).json({ success: false, message: 'Internal server error.' });
+    }
+});
+
+// 2. Verify OTP
+app.post('/api/forgot-password/verify-otp', async (req, res) => {
+    const { email, code } = req.body;
+    try {
+        const record = otpStore.get(email);
+
+        if (!record) {
+            return res.status(400).json({ success: false, message: 'No verification requested for this email.' });
+        }
+
+        if (Date.now() > record.expiresAt) {
+            otpStore.delete(email);
+            return res.status(400).json({ success: false, message: 'Verification code has expired. Please request a new code.' });
+        }
+
+        if (record.otp !== code) {
+            return res.status(400).json({ success: false, message: 'Invalid verification code.' });
+        }
+
+        // Mark as verified
+        record.verified = true;
+        otpStore.set(email, record);
+
+        // Fetch user for logging
+        const user = await prisma.user.findUnique({ where: { email } });
+        if (user) {
+            try {
+                await prisma.systemLog.create({
+                    data: {
+                        event_type: 'Authentication',
+                        module_name: 'User Portal',
+                        description: 'Action: Verification Successful',
+                        user_id: user.user_id.toString(),
+                        username: user.username,
+                        account_type: user.account_type,
+                        created_at: new Date()
+                    }
+                });
+            } catch (logErr) { console.error('Failed to log verification success:', logErr.message); }
+        }
+
+        res.json({ success: true, message: 'OTP verified successfully.' });
+    } catch (err) {
+        console.error('Error verifying OTP:', err);
+        res.status(500).json({ success: false, message: 'Internal server error.' });
+    }
+});
+
+// 3. Reset Password
+app.post('/api/forgot-password/reset-password', async (req, res) => {
+    const { email, new_password } = req.body;
+    try {
+        const record = otpStore.get(email);
+        
+        if (!record || !record.verified) {
+            return res.status(403).json({ success: false, message: 'Unauthorized password reset attempt.' });
+        }
+
+        // Fetch user to check password
+        const user = await prisma.user.findUnique({ where: { email } });
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'User not found.' });
+        }
+
+        if (user.password_hash === new_password) {
+            return res.status(400).json({ success: false, message: 'Cannot be the same as the current password.' });
+        }
+
+        if (!validateStrongPassword(new_password)) {
+            return res.status(400).json({ success: false, message: 'Password does not meet security requirements.' });
+        }
+
+        // Update password
+        const updatedUser = await prisma.user.update({
+            where: { email },
+            data: { password_hash: new_password }
+        });
+
+        // Invalidate OTP flow
+        otpStore.delete(email);
+
+        // Log completion
+        try {
+            await prisma.systemLog.create({
+                data: {
+                    event_type: 'Authentication',
+                    module_name: 'User Portal',
+                    description: 'Action: Password Reset Completed',
+                    user_id: updatedUser.user_id.toString(),
+                    username: updatedUser.username,
+                    account_type: updatedUser.account_type,
+                    created_at: new Date()
+                }
+            });
+        } catch (logErr) { console.error('Failed to log reset completion:', logErr.message); }
+
+        res.json({ success: true, message: 'Password reset successfully.' });
+    } catch (err) {
+        console.error('Error resetting password:', err);
+        res.status(500).json({ success: false, message: 'Internal server error.' });
+    }
+});
+
+// -- PASSWORD SETUP VIA EMAIL LINK --
+
+// 1. Validate Setup Token
+app.get('/api/user/validate-setup-token', async (req, res) => {
+    const { token } = req.query;
+    if (!token) return res.status(400).json({ success: false, message: 'No token provided.' });
+
+    const record = setupTokenStore.get(token);
+    if (!record) {
+        return res.status(400).json({ success: false, message: 'This password setup link is no longer valid.' });
+    }
+    
+    if (record.used) {
+        return res.status(400).json({ success: false, message: 'This password setup link has already been used.' });
+    }
+
+    if (Date.now() > record.expiresAt) {
+        setupTokenStore.delete(token);
+        return res.status(400).json({ success: false, message: 'This password setup link has expired.' });
+    }
+
+    // Still valid
+    res.json({ success: true, username: record.username });
+});
+
+// 2. Set Up New Password
+app.post('/api/user/setup-password', async (req, res) => {
+    const { token, new_password } = req.body;
+    try {
+        const record = setupTokenStore.get(token);
+        if (!record || record.used || Date.now() > record.expiresAt) {
+            if (record && Date.now() > record.expiresAt) setupTokenStore.delete(token);
+            return res.status(400).json({ success: false, message: 'This password setup link is no longer valid.' });
+        }
+
+        const user = await prisma.user.findFirst({ where: { user_id: BigInt(record.userId) } });
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'User not found.' });
+        }
+
+        if (user.password_hash === new_password) {
+             return res.status(400).json({ success: false, message: 'New password cannot be the same as the temporary password.' });
+        }
+
+        if (!validateStrongPassword(new_password)) {
+            return res.status(400).json({ success: false, message: 'Password does not meet security requirements.' });
+        }
+
+        // Update password and mark active
+        await prisma.user.update({
+            where: { user_id: user.user_id },
+            data: { password_hash: new_password, account_status: 'Active' }
+        });
+
+        // Mark token as used & invalidate
+        record.used = true;
+        setupTokenStore.delete(token);
+
+        // Logs
+        try {
+            await prisma.systemLog.create({
+                data: {
+                    event_type: 'Authentication',
+                    module_name: 'User Portal',
+                    description: 'Action: Password Successfully Set',
+                    user_id: user.user_id.toString(),
+                    username: user.username,
+                    account_type: user.account_type,
+                    created_at: new Date()
+                }
+            });
+            
+            await prisma.systemLog.create({
+                data: {
+                    event_type: 'Authentication',
+                    module_name: 'User Portal',
+                    description: 'Action: Account Activated',
+                    user_id: user.user_id.toString(),
+                    username: user.username,
+                    account_type: user.account_type,
+                    created_at: new Date()
+                }
+            });
+        } catch(e) {}
+
+        res.json({ success: true, message: 'Your password has been set successfully. You can now log in.' });
+    } catch (err) {
+        console.error('Error setting up new password:', err);
+        res.status(500).json({ success: false, message: 'Internal server error.' });
+    }
+});
+
+// Email Testing Endpoint
+app.post('/api/test-email', async (req, res) => {
+    const { to } = req.body;
+    console.log(`--- Email Delivery Test to: ${to} ---`);
+    try {
+        const info = await transporter.sendMail({
+            from: process.env.SMTP_FROM || 'test@egovernment.gov.so',
+            to,
+            subject: 'Test Email',
+            text: 'This is a standard backend testing email.'
+        });
+        res.json({ success: true, message: 'Email passed.', info });
+    } catch (err) {
+        console.error('[SMTP] Basic test endpoint failure:', err.message);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// Admin Email Diagnostics Endpoint
+app.post('/api/admin/email-diagnostics/test', async (req, res) => {
+    const { email } = req.body;
+    try {
+        console.log(`[SMTP Diagnostics] 1. Starting SMTP connection test...`);
+        const isVerified = await transporter.verify();
+        console.log(`[SMTP Diagnostics] 2. SMTP authentication success: ${isVerified}`);
+        
+        console.log(`[SMTP Diagnostics] 3. Attempting to send test email to: ${email}`);
+        const mailOptions = {
+            from: process.env.SMTP_FROM || 'noreply@egovernment.gov.so',
+            to: email,
+            subject: 'System Email Diagnostics Test',
+            html: `
+                <div style="font-family: Arial, sans-serif; padding: 20px;">
+                    <h2 style="color: #2563eb;">SMTP Diagnostic Successful</h2>
+                    <p>If you are receiving this email, it means your E-Government Portal SMTP connection is fully operational.</p>
+                    <p>Timestamp: ${new Date().toISOString()}</p>
+                </div>
+            `
+        };
+
+        console.log('Test email send attempted...');
+        const info = await transporter.sendMail(mailOptions);
+        console.log(`Test email send success. Message ID: ${info.messageId}`);
+        
+        res.json({ success: true, message: 'Test email delivered securely.', info });
+    } catch (error) {
+        console.error(`Test email send failure:`, error);
+        console.error(`SMTP error details: ${error.message}`);
+        res.status(500).json({ success: false, message: 'Unable to send test verification email. Please try again later.', error: error.message });
+    }
+});
+
 // Signup endpoint
 app.post('/api/signup', async (req, res) => {
     const { username, password, fullName, email, phoneNumber, nationalId, accountType = 'citizen' } = req.body;
 
     try {
+        if (!validateStrongPassword(password)) {
+            return res.status(400).json({ success: false, message: 'Password does not meet security requirements.' });
+        }
+
         // Check if user already exists
         const existingUser = await prisma.user.findUnique({
             where: { username }
@@ -446,32 +969,37 @@ app.post('/api/admin/register-citizen', async (req, res) => {
             newCitizen.photo = personal_photo;
         }
 
-        // Optionally, create a user account for them to login
-        const defaultUsername = nationalNumber;
-        const defaultPassword = 'Password123!'; // Should be generated or sent via email in a real app
-
-        const newUser = await prisma.user.create({
-            data: {
-                citizen_id: newCitizen.citizen_id,
-                username: defaultUsername,
-                email: email || `${nationalNumber}@citizen.gov.so`, // unique email
-                password_hash: defaultPassword,
-                account_type: 'citizen'
-            }
-        });
+        console.log(`[Success] Citizen registered successfully with National Number: ${nationalNumber}`);
+        try {
+            await prisma.systemLog.create({
+                data: {
+                    event_type: 'Registration',
+                    module_name: 'Admin System',
+                    description: `Action: Citizen Registered Successfully. National Number: ${nationalNumber}`,
+                    metadata: JSON.stringify({ name: fullName }),
+                    created_at: new Date()
+                }
+            });
+        } catch(e) { console.error('Failed to log citizen registration:', e.message); }
 
         res.json({
             success: true,
-            message: 'Citizen registered successfully',
-            citizen: {
-                ...newCitizen,
-                generated_username: defaultUsername,
-                generated_password: defaultPassword
-            }
+            message: 'Citizen registered successfully. Note: Account will be created when ID is issued.',
+            citizen: newCitizen
         });
 
     } catch (error) {
-        console.error('Error registering citizen:', error);
+        console.error(`[Failure] Error registering citizen: ${error.message}`);
+        try {
+            await prisma.systemLog.create({
+                data: {
+                    event_type: 'Registration Error',
+                    module_name: 'Admin System',
+                    description: `Action: Citizen Registration Failed. Error: ${error.message}`,
+                    created_at: new Date()
+                }
+            });
+        } catch(e) {}
         res.status(400).json({ error: error.message || 'Failed to register citizen', details: error.message });
     }
 });
@@ -566,32 +1094,109 @@ app.post('/api/admin/register-resident', async (req, res) => {
             newResident.photo = personal_photo;
         }
 
-        const defaultUsername = residenceNumber;
-        const defaultPassword = 'Password123!';
-
-        const newUser = await prisma.user.create({
-            data: {
-                resident_id: newResident.resident_id,
-                username: defaultUsername,
-                email: email || `${residenceNumber}@resident.gov.so`,
-                password_hash: defaultPassword,
-                account_type: 'resident'
-            }
-        });
+        console.log(`[Success] Resident registered successfully with Residence Number: ${residenceNumber}`);
+        try {
+            await prisma.systemLog.create({
+                data: {
+                    event_type: 'Registration',
+                    module_name: 'Admin System',
+                    description: `Action: Resident Registered Successfully. Residence Number: ${residenceNumber}`,
+                    metadata: JSON.stringify({ name: fullName, nationality }),
+                    created_at: new Date()
+                }
+            });
+        } catch(e) { console.error('Failed to log resident registration:', e.message); }
 
         res.json({
             success: true,
-            message: 'Resident registered successfully',
-            resident: {
-                ...newResident,
-                generated_username: defaultUsername,
-                generated_password: defaultPassword
-            }
+            message: 'Resident registered successfully. Note: Account will be created when ID is issued.',
+            resident: newResident
         });
 
     } catch (error) {
-        console.error('Error registering resident:', error);
+        console.error(`[Failure] Error registering resident: ${error.message}`);
+        try {
+            await prisma.systemLog.create({
+                data: {
+                    event_type: 'Registration Error',
+                    module_name: 'Admin System',
+                    description: `Action: Resident Registration Failed. Error: ${error.message}`,
+                    created_at: new Date()
+                }
+            });
+        } catch(e) {}
         res.status(400).json({ error: error.message || 'Failed to register resident', details: error.message });
+    }
+});
+
+// Admin endpoint to resend credentials
+app.post('/api/admin/resend-credentials', async (req, res) => {
+    const { username } = req.body;
+    try {
+        const user = await prisma.user.findUnique({
+            where: { username }
+        });
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'User not found.' });
+        }
+
+        const newPassword = generateTempPassword();
+
+        await prisma.user.update({
+            where: { username },
+            data: { 
+                password_hash: newPassword,
+                account_status: 'Pending Password Change'
+            }
+        });
+        
+        const setupToken = crypto.randomBytes(32).toString('hex');
+        setupTokenStore.set(setupToken, {
+            userId: user.user_id.toString(),
+            username: user.username,
+            email: user.email,
+            expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
+            used: false
+        });
+        
+        try {
+            await prisma.systemLog.create({
+                data: {
+                    event_type: 'Authentication',
+                    module_name: 'Admin System',
+                    description: 'Action: Password Setup Link Generated',
+                    user_id: user.user_id.toString(),
+                    username: user.username,
+                    account_type: user.account_type,
+                    created_at: new Date()
+                }
+            });
+        } catch(e) {}
+
+        const emailSent = await sendCredentialsEmail(user.email, user.username, newPassword, setupToken);
+
+        if (emailSent) {
+            try {
+                await prisma.systemLog.create({
+                    data: {
+                        event_type: 'Authentication',
+                        module_name: 'Admin System',
+                        description: 'Action: Password Setup Email Sent',
+                        user_id: user.user_id.toString(),
+                        username: user.username,
+                        account_type: user.account_type,
+                        created_at: new Date()
+                    }
+                });
+            } catch(e) {}
+            return res.json({ success: true, message: 'Credentials regenerated and setup email sent.' });
+        } else {
+            return res.status(500).json({ success: false, message: 'Password regenerated but failed to send email.' });
+        }
+    } catch (e) {
+        console.error('Error resending credentials:', e);
+        res.status(500).json({ success: false, message: 'Internal server error.' });
     }
 });
 
@@ -678,11 +1283,117 @@ app.post('/api/admin/issue-id-card', async (req, res) => {
             }
         });
 
+        let generatedUsername = null;
+        let generatedPassword = null;
+        let emailSent = false;
+        let finalEmail = citizen ? citizen.email : resident.email;
+        
+        // Check if user already exists
+        const existingUser = await prisma.user.findUnique({
+            where: { username: referenceNumber }
+        });
+        
+        if (!existingUser) {
+            generatedUsername = referenceNumber;
+            generatedPassword = generateTempPassword();
+            
+            if (!finalEmail) {
+                finalEmail = `${referenceNumber}@${idType}.gov.so`;
+            }
+
+            // Check if email already exists in User table to avoid P2002
+            const existingEmailUser = await prisma.user.findUnique({ where: { email: finalEmail } });
+            if (existingEmailUser) {
+                finalEmail = `${referenceNumber}_${Date.now().toString().slice(-4)}@${idType}.gov.so`;
+            }
+            
+            let newUser;
+            try {
+                newUser = await prisma.user.create({
+                    data: {
+                        citizen_id: citizen ? citizen.citizen_id : undefined,
+                        resident_id: resident ? resident.resident_id : undefined,
+                        username: generatedUsername,
+                        email: finalEmail,
+                        password_hash: generatedPassword,
+                        account_type: idType,
+                        account_status: 'Pending Password Change'
+                    }
+                });
+            } catch (userCreateErr) {
+                console.error('Failed to auto-create user (may exist already):', userCreateErr);
+                // We shouldn't stop ID card generation if user creation failed unpredictably
+            }
+            
+            if (newUser) {
+                try {
+                    await prisma.systemLog.create({
+                        data: {
+                            event_type: 'User Management',
+                            module_name: 'Admin System',
+                            description: 'Action: User Account Created',
+                            user_id: newUser.user_id.toString(),
+                            username: newUser.username,
+                            account_type: idType,
+                            created_at: new Date()
+                        }
+                    });
+                } catch (e) {}
+            
+                const setupToken = crypto.randomBytes(32).toString('hex');
+                setupTokenStore.set(setupToken, {
+                    userId: newUser.user_id.toString(),
+                    username: newUser.username,
+                    email: newUser.email,
+                    expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+                    used: false
+                });
+                
+                try {
+                    await prisma.systemLog.create({
+                        data: {
+                            event_type: 'Authentication',
+                            module_name: 'Admin System',
+                            description: 'Action: Password Setup Link Generated',
+                            user_id: newUser.user_id.toString(),
+                            username: newUser.username,
+                            account_type: idType,
+                            created_at: new Date()
+                        }
+                    });
+                } catch(e) {}
+
+                emailSent = await sendCredentialsEmail(finalEmail, generatedUsername, generatedPassword, setupToken);
+                
+                if (emailSent) {
+                    try {
+                        await prisma.systemLog.create({
+                            data: {
+                                event_type: 'Authentication',
+                                module_name: 'Admin System',
+                                description: 'Action: Password Setup Email Sent',
+                                user_id: newUser.user_id.toString(),
+                                username: newUser.username,
+                                account_type: idType,
+                                created_at: new Date()
+                            }
+                        });
+                    } catch (e) {}
+                }
+            }
+        }
+        
+        // Remove the block that returns success: false if email fails, 
+        // to ensure ID generation succeeds regardless of SMTP configuration.
+
         res.json({
             success: true,
-            message: `${idType === 'citizen' ? 'National' : 'Residence'} ID Card issued successfully. Sent to Printing Queue.`,
+            message: `${idType === 'citizen' ? 'National' : 'Residence'} ID Card issued successfully. Sent to Printing Queue.${!existingUser ? ' Account generated and credentials sent.' : ''}`,
             idCard: newIdCard,
-            person: citizen || resident
+            person: citizen || resident,
+            generated_username: generatedUsername,
+            generated_password: generatedPassword,
+            email_sent: emailSent
         });
 
     } catch (error) {
@@ -1376,6 +2087,122 @@ app.put('/api/admin/requests/:id', async (req, res) => {
                 request: JSON.parse(JSON.stringify(updated, (key, value) => typeof value === 'bigint' ? value.toString() : value)),
                 auto_completed: true,
                 message: 'Request approved and PDF generated successfully.'
+            });
+        }
+
+        const isIdIssuanceOrRenewal = serviceType === 'ID_RENEWAL' || serviceType === 'NATIONAL_ID' || serviceType === 'NEW_NATIONAL_ID';
+
+        if (isApproving && isIdIssuanceOrRenewal) {
+            const applicantName = application.citizen?.full_name || application.resident?.full_name || 'Unknown';
+            let docNumber = application.citizen?.national_number || application.resident?.residence_number;
+            const docType = 'National ID';
+            const personIdValue = application.citizen_id || application.resident_id;
+            const idType = application.citizen_id ? 'citizen' : 'resident';
+
+            // National ID Number Generation: Ensure 11-digit Unique ID is generated properly as a string
+            if (!docNumber) {
+                let isUnique = false;
+                while (!isUnique) {
+                    docNumber = Math.floor(10000000000 + Math.random() * 90000000000).toString();
+                    const existing = idType === 'citizen' 
+                        ? await prisma.citizen.findUnique({ where: { national_number: docNumber } })
+                        : await prisma.resident.findUnique({ where: { residence_number: docNumber } });
+                    if (!existing) isUnique = true;
+                }
+                
+                if (idType === 'citizen') {
+                    await prisma.citizen.update({ where: { citizen_id: personIdValue }, data: { national_number: docNumber }});
+                } else {
+                    await prisma.resident.update({ where: { resident_id: personIdValue }, data: { residence_number: docNumber }});
+                }
+            }
+
+            // Create new ID card and expire old ones
+            const issueDate = new Date();
+            const expiryDate = new Date();
+            expiryDate.setFullYear(issueDate.getFullYear() + (idType === 'citizen' ? 10 : 5));
+
+            let newIssueNumber = 1;
+            if (idType === 'citizen') {
+                const existingCards = await prisma.citizenIdCard.findMany({ where: { citizen_id: personIdValue }, orderBy: { issue_date: 'desc' } });
+                if (existingCards.length > 0) {
+                    newIssueNumber = existingCards[0].issue_number + 1;
+                    await prisma.citizenIdCard.updateMany({ where: { citizen_id: personIdValue, status: 'active' }, data: { status: 'expired' } });
+                }
+                await prisma.citizenIdCard.create({
+                    data: {
+                        citizen_id: personIdValue,
+                        issue_number: newIssueNumber,
+                        issue_date: issueDate,
+                        expiry_date: expiryDate,
+                        status: 'active'
+                    }
+                });
+            } else {
+                const existingCards = await prisma.residentIdCard.findMany({ where: { resident_id: personIdValue }, orderBy: { issue_date: 'desc' } });
+                if (existingCards.length > 0) {
+                    newIssueNumber = existingCards[0].issue_number + 1;
+                    await prisma.residentIdCard.updateMany({ where: { resident_id: personIdValue, status: 'active' }, data: { status: 'expired' } });
+                }
+                await prisma.residentIdCard.create({
+                    data: {
+                        resident_id: personIdValue,
+                        issue_number: newIssueNumber,
+                        issue_date: issueDate,
+                        expiry_date: expiryDate,
+                        status: 'active'
+                    }
+                });
+            }
+
+            // Move application straight to printing_queue
+            const updated = await prisma.application.update({
+                where: { application_id: BigInt(id) },
+                data: {
+                    status: 'printing_queue',
+                    approval_date: new Date()
+                }
+            });
+
+            await prisma.printQueue.create({
+                data: {
+                    document_type: docType,
+                    document_number: docNumber,
+                    applicant_name: applicantName,
+                    request_number: id.toString(),
+                    status: 'pending'
+                }
+            });
+
+            await prisma.revenue.create({
+                data: {
+                    transaction_type: 'National ID',
+                    service_name: serviceType === 'ID_RENEWAL' ? 'National ID Renewal' : 'New National ID',
+                    amount: 50.00,
+                    applicant_name: applicantName,
+                    id_number: docNumber,
+                    application_id: id.toString(),
+                    payment_method: 'card',
+                    status: 'completed'
+                }
+            }).catch(() => null);
+
+            await createLog({
+                event_type: 'REQUEST_APPROVED',
+                module_name: 'Requests',
+                description: `${serviceType} approved for ${applicantName}. New ID Card generated and auto-queued for printing.`,
+                ip_address: req.ip,
+                metadata: { application_id: id, service_type: serviceType, applicant: applicantName }
+            });
+
+            notifyUser(personIdValue, application.applicant_type, 'Request Approved & ID Generated', `Your request (${serviceType}) has been approved and moved to the printing queue.`, 'request_approved');
+            notifyStaff('ID Card Ready for Printing', `ID Card for ${applicantName} is queued for printing.`, 'staff_printing_queue');
+
+            return res.json({
+                success: true,
+                request: JSON.parse(JSON.stringify(updated, (key, value) => typeof value === 'bigint' ? value.toString() : value)),
+                auto_queued: true,
+                message: 'Request approved, ID Card generated, and sent to Printing Queue.'
             });
         }
 

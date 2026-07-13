@@ -10,11 +10,13 @@ import ServiceDetail from './pages/ServiceDetail';
 import ApplicationForm from './pages/ApplicationForm';
 import ServicesCatalog from './pages/ServicesCatalog';
 import Login from './pages/Login';
-import SignUp from './pages/SignUp';
 import ForgotPassword from './pages/ForgotPassword';
 import Notifications from './pages/Notifications';
 import RequestsHistory from './pages/RequestsHistory';
 import CriminalCertificate from './pages/CriminalCertificate';
+import BirthCertificatePDF from './pages/BirthCertificatePDF';
+import ChangePassword from './pages/ChangePassword';
+import SetPassword from './pages/SetPassword';
 
 import { LanguageProvider } from './LanguageContext';
 import { ThemeProvider } from './ThemeContext';
@@ -34,10 +36,9 @@ const App = () => {
                 <Router>
                     <div className="flex flex-col min-h-screen font-sans transition-colors duration-500 dark:bg-primary-950">
                         <Routes>
-                            {/* Auth Routes */}
                             <Route path="/" element={<Login />} />
-                            <Route path="/signup" element={<SignUp />} />
                             <Route path="/forgot-password" element={<ForgotPassword />} />
+                            <Route path="/set-password" element={<SetPassword />} />
 
                             {/* Admin Interface */}
                             <Route path="/admin/*" element={<AdminDashboard />} />
@@ -53,6 +54,8 @@ const App = () => {
                                             <Route path="/notifications" element={<Notifications />} />
                                             <Route path="/requests" element={<RequestsHistory />} />
                                             <Route path="/criminal-certificate" element={<CriminalCertificate />} />
+                                            <Route path="/birth-certificate-pdf" element={<BirthCertificatePDF />} />
+                                            <Route path="/change-password" element={<ChangePassword />} />
 
                                             <Route path="/services" element={<ServicesCatalog />} />
                                             <Route path="/service/:id" element={<ServiceDetail />} />

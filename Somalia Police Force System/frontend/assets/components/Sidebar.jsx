@@ -16,9 +16,9 @@ const Sidebar = ({
     label: t.search,
     icon: '🔍'
   }, {
-    id: 'records',
-    label: t.records,
-    icon: '📁'
+    id: 'archives',
+    label: t.archives || 'Criminal Archives',
+    icon: '🗄️'
   }, {
     id: 'add-crime',
     label: lang === 'ar' ? 'إضافة سجل جنائي' : (lang === 'so' ? 'Diiwaan Dambiyeed' : 'Add Crime'),
@@ -28,14 +28,9 @@ const Sidebar = ({
     label: lang === 'ar' ? 'سجل جنائي للمقيمين' : (lang === 'so' ? 'Dambiyada Dadka Soo Galootiga' : 'Resident Crime Record'),
     icon: '🛂'
   }, {
-
     id: 'reports',
-    label: t.reports,
-    icon: '📡'
-  }, {
-    id: 'settings',
-    label: t.settings,
-    icon: '🛡️'
+    label: t.reports || 'Reports',
+    icon: '📊'
   }];
   return <div className={`w-64 bg-[#0b1528] text-slate-300 h-screen flex flex-col border-r border-white/10 z-30 relative overflow-hidden`}>
       <div className="p-8 relative z-10 flex flex-col items-center">
