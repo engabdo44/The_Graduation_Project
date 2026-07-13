@@ -6,7 +6,7 @@ const ResidentCriminalRecordForm = ({ lang }) => {
     residence_number: '',
     crime_type: '',
     incident_date: '',
-    court_decision: '',
+    crime_details: '',
     severity: 'C',
     status: 'open'
   });
@@ -23,7 +23,7 @@ const ResidentCriminalRecordForm = ({ lang }) => {
     residenceNumber: isAr ? 'رقم الإقامة' : isSo ? 'Lambarka deganaanshaha' : 'Residence Number',
     crimeType: t.type,
     incidentDate: t.date,
-    courtDecision: t.courtDecision || (isAr ? 'قرار المحكمة' : isSo ? 'Go\'aanka Maxkamadda' : 'Court Decision'),
+    crimeDetails: t.crimeDetails || (isAr ? 'تفاصيل الجريمة' : isSo ? 'Faahfaahinta Dambiga' : 'Crime Details'),
     status: t.status,
     open: isAr ? 'مفتوحة' : isSo ? 'Furan' : 'Open',
     closed: isAr ? 'مغلقة' : isSo ? 'Xiran' : 'Closed',
@@ -54,7 +54,7 @@ const ResidentCriminalRecordForm = ({ lang }) => {
       });
       if (response.ok) {
         setMessage({ type: 'success', text: texts.success });
-        setFormData({ residence_number: '', crime_type: '', incident_date: '', court_decision: '', status: 'open', severity: 'C' });
+        setFormData({ residence_number: '', crime_type: '', incident_date: '', crime_details: '', status: 'open', severity: 'C' });
       } else {
         const errorData = await response.json();
         setMessage({ type: 'error', text: errorData.error || texts.error });
@@ -144,14 +144,18 @@ const ResidentCriminalRecordForm = ({ lang }) => {
           </div>
 
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">{texts.courtDecision}</label>
+            <label className="block text-sm font-bold text-slate-700 mb-2">{texts.crimeDetails}</label>
             <textarea 
-              name="court_decision" 
-              rows="4" 
-              value={formData.court_decision} 
+              name="crime_details" 
+              rows="6" 
+              minLength={500}
+              maxLength={5000}
+              value={formData.crime_details} 
               onChange={handleChange} 
+              placeholder={isAr ? "يرجى كتابة وصف دقيق ومفصل للجريمة وملابساتها وملاحظات التحقيق (بين 500 و 5000 حرف)..." : "Please provide a detailed incident summary, investigation notes, and circumstances of the offense (500–5000 characters)..."}
               className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:border-[#c5a059] focus:ring-1 focus:ring-[#c5a059] outline-none transition-all"
             ></textarea>
+            <p className="text-[10px] text-slate-400 mt-1">{formData.crime_details.length} / 5000 chars</p>
           </div>
 
           <div className="pt-4">

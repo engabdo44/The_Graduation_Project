@@ -2,16 +2,21 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { translations } from '../translations';
 
+import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+
 const MinistryDashboard = ({ user, lang }) => {
-  const [revenueData, setRevenueData] = useState({ totalRevenue: 0, monthlyRevenue: 0, annualRevenue: 0, issuanceCount: 0, reprintCount: 0 });
+  const [statsData, setStatsData] = useState({ 
+      totalBirths: 0, totalDeaths: 0, totalReprintsRevenue: 0, 
+      totalGeneratedRevenue: 0, activeFacilities: 0, chartData: [] 
+  });
 
   useEffect(() => {
     const fetchRevenue = async () => {
       try {
-        const res = await fetch('http://localhost:5002/api/reports/revenue');
+        const res = await fetch('http://localhost:5002/api/dashboard/stats');
         const data = await res.json();
         if(data.success) {
-          setRevenueData(data);
+          setStatsData(data);
         }
       } catch (err) {
         console.error('Failed to fetch revenue', err);
@@ -23,18 +28,18 @@ const MinistryDashboard = ({ user, lang }) => {
   const common = translations[lang].common;
 
   const stats = [
-    { label: lang === 'ar' ? 'إجمالي المواليد' : 'Total Births', value: '12,847', icon: 'fa-baby', color: 'bg-emerald-500' },
-    { label: lang === 'ar' ? 'إجمالي الوفيات' : 'Total Deaths', value: '3,421', icon: 'fa-ribbon', color: 'bg-rose-500' },
-    { label: lang === 'ar' ? 'السجلات الصحية' : 'Health Records', value: '45,892', icon: 'fa-users-line', color: 'bg-blue-500' },
-    { label: lang === 'ar' ? 'المنشطات النشطة' : 'Active Facilities', value: '156', icon: 'fa-hospital', color: 'bg-amber-500' },
+    { label: lang === 'ar' ? 'إجمالي المواليد' : 'Total Births', value: statsData.totalBirths, icon: 'fa-baby', color: 'bg-emerald-500' },
+    { label: lang === 'ar' ? 'إجمالي الوفيات' : 'Total Deaths', value: statsData.totalDeaths, icon: 'fa-ribbon', color: 'bg-rose-500' },
+    { label: lang === 'ar' ? 'العوائد المولدة' : 'Total Generated Revenue', value: `$${statsData.totalGeneratedRevenue}`, icon: 'fa-sack-dollar', color: 'bg-amber-500' },
+    { label: lang === 'ar' ? 'المنشآت النشطة' : 'Active Facilities', value: statsData.activeFacilities, icon: 'fa-hospital', color: 'bg-blue-500' },
   ];
 
-  const recentActivities = [
-    { id: 1, type: 'birth', desc: lang === 'ar' ? 'تسجيل ميلاد جديد' : 'New birth registration', time: '2 min ago' },
-    { id: 2, type: 'death', desc: lang === 'ar' ? 'تسجيل وفاة' : 'Death certificate issued', time: '15 min ago' },
-    { id: 3, type: 'record', desc: lang === 'ar' ? 'تحديث سجل صحي' : 'Health record updated', time: '1 hour ago' },
-    { id: 4, type: 'birth', desc: lang === 'ar' ? 'تسجيل ميلاد جديد' : 'New birth registration', time: '2 hours ago' },
+  const pieData = [
+    { name: 'Birth Printed', value: statsData.chartData.reduce((acc, curr) => acc + curr.births, 0) || 10 },
+    { name: 'Death Printed', value: statsData.chartData.reduce((acc, curr) => acc + curr.deaths, 0) || 5 },
+    { name: 'Reprints', value: statsData.totalReprintsRevenue / 10 || 2 }
   ];
+  const COLORS = ['#10b981', '#f43f5e', '#3b82f6'];
 
   return (
     <div className={`space-y-6 ${lang === 'ar' ? 'font-arabic' : ''}`}>
@@ -87,127 +92,76 @@ const MinistryDashboard = ({ user, lang }) => {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-slate-100 pt-6">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-emerald-50 rounded-2xl p-6 border border-emerald-100/50 shadow-sm relative overflow-hidden">
-            <i className="fa-solid fa-file-signature text-5xl absolute -right-4 -bottom-4 text-emerald-500/10"></i>
-            <p className="text-emerald-600/80 font-black text-[9px] uppercase tracking-widest mb-1">Total Free Issuance ($0)</p>
-            <p className="text-3xl font-black text-emerald-700 gov-serif tracking-tight">{revenueData.issuanceCount}</p>
-          </motion.div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-slate-100 pt-6">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-blue-50 rounded-2xl p-6 border border-blue-100/50 shadow-sm relative overflow-hidden">
             <i className="fa-solid fa-copy text-5xl absolute -right-4 -bottom-4 text-blue-500/10"></i>
-            <p className="text-blue-600/80 font-black text-[9px] uppercase tracking-widest mb-1">Total Reprints ($10)</p>
-            <p className="text-3xl font-black text-blue-700 gov-serif tracking-tight">{revenueData.reprintCount}</p>
+            <p className="text-blue-600/80 font-black text-[9px] uppercase tracking-widest mb-1">Total Reprints Revenue</p>
+            <p className="text-3xl font-black text-blue-700 gov-serif tracking-tight">${statsData.totalReprintsRevenue}</p>
           </motion.div>
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="bg-amber-50 rounded-2xl p-6 border border-amber-100/50 shadow-sm relative overflow-hidden">
             <i className="fa-solid fa-sack-dollar text-5xl absolute -right-4 -bottom-4 text-amber-500/10"></i>
             <p className="text-amber-600/80 font-black text-[9px] uppercase tracking-widest mb-1">Total Generated Revenue</p>
-            <p className="text-3xl font-black text-amber-700 gov-serif tracking-tight">${revenueData.totalRevenue}</p>
+            <p className="text-3xl font-black text-amber-700 gov-serif tracking-tight">${statsData.totalGeneratedRevenue}</p>
           </motion.div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.3 }}
-          className="bg-white rounded-2xl p-6 shadow-xl border border-slate-100"
-        >
-          <h3 className={`text-lg font-black text-gov-navy uppercase tracking-tight mb-4 ${lang === 'ar' ? 'text-right' : 'text-left'}`}>
-            {lang === 'ar' ? 'النشاط الأخير' : 'Recent Activity'}
-          </h3>
-          <div className="space-y-3">
-            {recentActivities.map((activity) => (
-              <div
-                key={activity.id}
-                className={`flex items-center gap-3 p-3 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors ${lang === 'ar' ? 'flex-row-reverse' : 'flex-row'}`}
-              >
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
-                  activity.type === 'birth' ? 'bg-emerald-100 text-emerald-500' :
-                  activity.type === 'death' ? 'bg-rose-100 text-rose-500' :
-                  'bg-blue-100 text-blue-500'
-                }`}>
-                  <i className={`fa-solid ${
-                    activity.type === 'birth' ? 'fa-baby' :
-                    activity.type === 'death' ? 'fa-ribbon' :
-                    'fa-file-medical'
-                  }`}></i>
-                </div>
-                <div className={`flex-1 min-w-0 ${lang === 'ar' ? 'text-right' : 'text-left'}`}>
-                  <p className="text-gov-navy font-bold text-xs truncate">{activity.desc}</p>
-                  <p className="text-slate-400 text-[9px] font-medium">{activity.time}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+      {/* Analytics Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+        {/* Birth/Death Trend Line Chart */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-6 rounded-2xl shadow border border-slate-100">
+           <h3 className="text-lg font-black text-gov-navy uppercase tracking-tight mb-4">Registration Trends</h3>
+           <div className="h-64">
+             <ResponsiveContainer width="100%" height="100%">
+               <LineChart data={statsData.chartData}>
+                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
+                 <XAxis dataKey="name" tick={{fontSize: 10}} axisLine={false} tickLine={false}/>
+                 <YAxis tick={{fontSize: 10}} axisLine={false} tickLine={false}/>
+                 <Tooltip />
+                 <Legend wrapperStyle={{fontSize: 10, fontWeight: 'bold'}}/>
+                 <Line type="monotone" dataKey="births" stroke="#10b981" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
+                 <Line type="monotone" dataKey="deaths" stroke="#f43f5e" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
+               </LineChart>
+             </ResponsiveContainer>
+           </div>
+        </motion.div>
+        
+        {/* Revenue/Prints Bar Chart */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-white p-6 rounded-2xl shadow border border-slate-100">
+           <h3 className="text-lg font-black text-gov-navy uppercase tracking-tight mb-4">Revenue & Output Analytics</h3>
+           <div className="h-64">
+             <ResponsiveContainer width="100%" height="100%">
+               <BarChart data={statsData.chartData}>
+                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
+                 <XAxis dataKey="name" tick={{fontSize: 10}} axisLine={false} tickLine={false}/>
+                 <YAxis yAxisId="left" tick={{fontSize: 10}} axisLine={false} tickLine={false}/>
+                 <YAxis yAxisId="right" orientation="right" tick={{fontSize: 10}} axisLine={false} tickLine={false}/>
+                 <Tooltip cursor={{fill: '#f8fafc'}}/>
+                 <Legend wrapperStyle={{fontSize: 10, fontWeight: 'bold'}}/>
+                 <Bar yAxisId="left" dataKey="revenue" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                 <Bar yAxisId="right" dataKey="prints" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+               </BarChart>
+             </ResponsiveContainer>
+           </div>
         </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.4 }}
-          className="bg-white rounded-2xl p-6 shadow-xl border border-slate-100"
-        >
-          <h3 className={`text-lg font-black text-gov-navy uppercase tracking-tight mb-4 ${lang === 'ar' ? 'text-right' : 'text-left'}`}>
-            {lang === 'ar' ? 'حالة النظام' : 'System Status'}
-          </h3>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <span className={`text-slate-600 font-bold text-xs ${lang === 'ar' ? 'text-right' : 'text-left'}`}>
-                {lang === 'ar' ? 'قاعدة البيانات' : 'Database'}
-              </span>
-              <span className="text-emerald-500 font-black text-[10px] uppercase tracking-wider bg-emerald-50 px-3 py-1 rounded-full">
-                {lang === 'ar' ? 'متصل' : 'Connected'}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className={`text-slate-600 font-bold text-xs ${lang === 'ar' ? 'text-right' : 'text-left'}`}>
-                {lang === 'ar' ? 'الخادم' : 'Server'}
-              </span>
-              <span className="text-emerald-500 font-black text-[10px] uppercase tracking-wider bg-emerald-50 px-3 py-1 rounded-full">
-                {lang === 'ar' ? 'نشط' : 'Active'}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className={`text-slate-600 font-bold text-xs ${lang === 'ar' ? 'text-right' : 'text-left'}`}>
-                {lang === 'ar' ? 'التزامن' : 'Sync'}
-              </span>
-              <span className="text-blue-500 font-black text-[10px] uppercase tracking-wider bg-blue-50 px-3 py-1 rounded-full">
-                {lang === 'ar' ? 'محدث' : 'Updated'}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className={`text-slate-600 font-bold text-xs ${lang === 'ar' ? 'text-right' : 'text-left'}`}>
-                {lang === 'ar' ? 'الأمان' : 'Security'}
-              </span>
-              <span className="text-emerald-500 font-black text-[10px] uppercase tracking-wider bg-emerald-50 px-3 py-1 rounded-full">
-                {lang === 'ar' ? 'مؤمن' : 'Secured'}
-              </span>
-            </div>
-          </div>
+        {/* Distribution Pie Chart */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-white p-6 rounded-2xl shadow border border-slate-100 lg:col-span-2 flex flex-col items-center">
+           <h3 className="text-lg font-black text-gov-navy uppercase tracking-tight mb-4 self-start w-full">Certificate Printing Distribution</h3>
+           <div className="h-64 w-full md:w-1/2">
+             <ResponsiveContainer width="100%" height="100%">
+               <PieChart>
+                 <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                   {pieData.map((entry, index) => (
+                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                   ))}
+                 </Pie>
+                 <Tooltip />
+                 <Legend wrapperStyle={{fontSize: 10, fontWeight: 'bold'}}/>
+               </PieChart>
+             </ResponsiveContainer>
+           </div>
         </motion.div>
       </div>
-
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.5 }}
-        className="bg-gradient-to-r from-gov-navy to-gov-blue rounded-2xl p-8 shadow-xl text-white relative overflow-hidden"
-      >
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white rounded-full blur-3xl"></div>
-          <div className="absolute bottom-0 left-0 w-64 h-64 bg-gov-gold rounded-full blur-3xl"></div>
-        </div>
-        <div className="relative z-10">
-          <h3 className={`text-xl font-black gov-serif uppercase tracking-tight mb-2 ${lang === 'ar' ? 'text-right' : 'text-left'}`}>
-            {lang === 'ar' ? 'مرحباً بك في لوحة تحكم الوزارة' : 'Welcome to Ministry Dashboard'}
-          </h3>
-          <p className={`text-blue-100/80 font-medium text-sm leading-relaxed ${lang === 'ar' ? 'text-right' : 'text-left'}`}>
-            {lang === 'ar' 
-              ? 'لديك صلاحيات كاملة لإدارة السجلات الصحية الوطنية ومراقبة النظام.'
-              : 'You have full permissions to manage national health records and monitor the system.'}
-          </p>
-        </div>
-      </motion.div>
     </div>
   );
 };

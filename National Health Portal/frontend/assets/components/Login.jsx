@@ -48,7 +48,7 @@ const Login = ({ onLogin, lang, setLang }) => {
         addNotification('success', lang === 'ar' ? 'تم تسجيل الدخول بنجاح' : 'Login successful');
         
         // Redirect based on role
-        const redirectView = data.user.role === 'Ministry Health Admin' ? 'MINISTRY_DASHBOARD' : 'DASHBOARD';
+        const redirectView = (data.user.role === 'Ministry Health Admin' || data.user.role === 'Ministry_Health_Admin') ? 'MINISTRY_DASHBOARD' : 'DASHBOARD';
         
         onLogin({
           ...data.user,

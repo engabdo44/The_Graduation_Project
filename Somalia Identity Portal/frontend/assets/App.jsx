@@ -10,14 +10,35 @@ import ServiceDetail from './pages/ServiceDetail';
 import ApplicationForm from './pages/ApplicationForm';
 import ServicesCatalog from './pages/ServicesCatalog';
 import Login from './pages/Login';
-import SignUp from './pages/SignUp';
 import ForgotPassword from './pages/ForgotPassword';
 import Notifications from './pages/Notifications';
 import RequestsHistory from './pages/RequestsHistory';
 import CriminalCertificate from './pages/CriminalCertificate';
+import BirthCertificatePDF from './pages/BirthCertificatePDF';
+import ChangePassword from './pages/ChangePassword';
+import SetPassword from './pages/SetPassword';
 
 import { LanguageProvider } from './LanguageContext';
 import { ThemeProvider } from './ThemeContext';
+
+const ProtectedRoute = ({ children, allowedRoles }) => {
+    const userJson = localStorage.getItem('user');
+    if (!userJson) {
+        return <Navigate to="/" replace />;
+    }
+    try {
+        const user = JSON.parse(userJson);
+        if (allowedRoles && !allowedRoles.includes(user.account_type)) {
+            if (['citizen', 'resident'].includes(user.account_type)) {
+                return <Navigate to="/home" replace />;
+            }
+            return <Navigate to="/" replace />;
+        }
+    } catch (e) {
+        return <Navigate to="/" replace />;
+    }
+    return children;
+};
 
 const NotFound = () => (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4 dark:text-white">
@@ -34,35 +55,42 @@ const App = () => {
                 <Router>
                     <div className="flex flex-col min-h-screen font-sans transition-colors duration-500 dark:bg-primary-950">
                         <Routes>
-                            {/* Auth Routes */}
                             <Route path="/" element={<Login />} />
-                            <Route path="/signup" element={<SignUp />} />
                             <Route path="/forgot-password" element={<ForgotPassword />} />
+                            <Route path="/set-password" element={<SetPassword />} />
 
                             {/* Admin Interface */}
-                            <Route path="/admin/*" element={<AdminDashboard />} />
+                            <Route path="/admin/*" element={
+                                <ProtectedRoute allowedRoles={['admin', 'Printing_Officer', 'Immigration_Officer', 'Immigration_Department_Manager']}>
+                                    <AdminDashboard />
+                                </ProtectedRoute>
+                            } />
 
-                            {/* Public Routes */}
+                            {/* Public Protected Routes */}
                             <Route path="*" element={
-                                <>
-                                    <Header />
-                                    <main className="flex-grow">
-                                        <Routes>
-                                            <Route path="/home" element={<Home />} />
-                                            <Route path="/profile" element={<Profile />} />
-                                            <Route path="/notifications" element={<Notifications />} />
-                                            <Route path="/requests" element={<RequestsHistory />} />
-                                            <Route path="/criminal-certificate" element={<CriminalCertificate />} />
+                                <ProtectedRoute allowedRoles={['admin', 'Printing_Officer', 'Immigration_Officer', 'Immigration_Department_Manager', 'citizen', 'resident']}>
+                                    <>
+                                        <Header />
+                                        <main className="flex-grow">
+                                            <Routes>
+                                                <Route path="/home" element={<Home />} />
+                                                <Route path="/profile" element={<Profile />} />
+                                                <Route path="/notifications" element={<Notifications />} />
+                                                <Route path="/requests" element={<RequestsHistory />} />
+                                                <Route path="/criminal-certificate" element={<CriminalCertificate />} />
+                                                <Route path="/birth-certificate-pdf" element={<BirthCertificatePDF />} />
+                                                <Route path="/change-password" element={<ChangePassword />} />
 
-                                            <Route path="/services" element={<ServicesCatalog />} />
-                                            <Route path="/service/:id" element={<ServiceDetail />} />
-                                            <Route path="/apply/:id" element={<ApplicationForm />} />
-                                            <Route path="/404" element={<NotFound />} />
-                                            <Route path="*" element={<Navigate to="/404" replace />} />
-                                        </Routes>
-                                    </main>
-                                    <Footer />
-                                </>
+                                                <Route path="/services" element={<ServicesCatalog />} />
+                                                <Route path="/service/:id" element={<ServiceDetail />} />
+                                                <Route path="/apply/:id" element={<ApplicationForm />} />
+                                                <Route path="/404" element={<NotFound />} />
+                                                <Route path="*" element={<Navigate to="/404" replace />} />
+                                            </Routes>
+                                        </main>
+                                        <Footer />
+                                    </>
+                                </ProtectedRoute>
                             } />
                         </Routes>
                     </div>

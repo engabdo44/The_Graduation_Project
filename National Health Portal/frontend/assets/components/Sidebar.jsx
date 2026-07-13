@@ -7,12 +7,12 @@ const Sidebar = ({ currentView, setView, user, onLogout, lang }) => {
   const t = translations[lang].nav;
 
   const menuItems = [
-    { id: View.DASHBOARD, label: t.dashboard, icon: 'fa-shield-halved' },
+    { id: View.MINISTRY_DASHBOARD, label: lang === 'ar' ? 'لوحة الوزارة' : 'Ministry Dashboard', icon: 'fa-building-columns' },
     { id: View.HEALTH_RECORDS, label: t.healthRecords, icon: 'fa-users-line' },
     { id: View.BIRTH_CERT, label: t.birthCert, icon: 'fa-baby' },
     { id: View.DEATH_CERT, label: t.deathCert, icon: 'fa-scroll' },
-    { id: View.REPORTS, label: t.reports, icon: 'fa-chart-pie' },
-    ...(user.role === 'Ministry Health Admin' ? [{ id: View.MINISTRY_DASHBOARD, label: lang === 'ar' ? 'لوحة الوزارة' : 'Ministry Dashboard', icon: 'fa-building-columns' }] : []),
+    { id: View.PRINTING_CENTER, label: lang === 'ar' ? 'مركز الطباعة' : 'Printing Center', icon: 'fa-print' },
+    { id: View.REPORTS, label: t.reports, icon: 'fa-chart-pie' }
   ];
 
   return (

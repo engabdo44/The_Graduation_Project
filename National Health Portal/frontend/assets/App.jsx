@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import Sidebar from './components/Sidebar';
-import Dashboard from './components/Dashboard';
+import PrintingCenter from './components/PrintingCenter';
+
 import BirthCertificate from './components/BirthCertificate';
 import DeathCertificate from './components/DeathCertificate';
 import HealthRecords from './components/HealthRecords';
@@ -13,38 +14,52 @@ import { View } from './types';
 import { translations } from './translations';
 
 const App = () => {
-  const [user, setUser] = useState(null);
-  const [currentView, setCurrentView] = useState(View.DASHBOARD);
-  const [lang, setLang] = useState('en');
+  const [user, setUser] = useState(() => {
+    const saved = localStorage.getItem('health_user');
+    return saved ? JSON.parse(saved) : null;
+  });
+  const [currentView, setCurrentView] = useState(() => {
+    return localStorage.getItem('health_currentView') || View.MINISTRY_DASHBOARD;
+  });
+  const [lang, setLang] = useState(() => {
+    return localStorage.getItem('health_lang') || 'en';
+  });
+
+  useEffect(() => {
+    if (user) {
+      localStorage.setItem('health_user', JSON.stringify(user));
+    } else {
+      localStorage.removeItem('health_user');
+    }
+  }, [user]);
+
+  useEffect(() => {
+    localStorage.setItem('health_currentView', currentView);
+  }, [currentView]);
 
   const t = translations[lang];
 
   useEffect(() => {
     document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
     document.documentElement.lang = lang;
+    localStorage.setItem('health_lang', lang);
   }, [lang]);
 
   const handleLogin = (userData) => {
     setUser(userData);
     // Set initial view based on role
-    if (userData.redirectView) {
-      setCurrentView(userData.redirectView);
-    } else if (userData.role === 'Ministry Health Admin') {
       setCurrentView(View.MINISTRY_DASHBOARD);
-    } else {
-      setCurrentView(View.DASHBOARD);
-    }
   };
 
   const handleLogout = () => {
     setUser(null);
-    setCurrentView(View.DASHBOARD);
+    setCurrentView(View.MINISTRY_DASHBOARD);
   };
 
   const canAccessView = (view) => {
     if (!user) return false;
     
-    if (user.role === 'Ministry Health Admin') {
+    if (user.role === 'Ministry Health Admin' || user.role === 'Ministry_Health_Admin') {
       return true;
     }
     
@@ -72,7 +87,7 @@ const App = () => {
               : 'You do not have permission to access this page'}
           </p>
           <button
-            onClick={() => setCurrentView(View.DASHBOARD)}
+            onClick={() => setCurrentView(View.MINISTRY_DASHBOARD)}
             className="bg-gov-navy text-white px-6 py-3 rounded-xl font-black uppercase tracking-wider text-xs hover:bg-black transition-colors"
           >
             {lang === 'ar' ? 'العودة إلى لوحة التحكم' : 'Return to Dashboard'}
@@ -82,13 +97,13 @@ const App = () => {
     }
 
     switch (currentView) {
-      case View.DASHBOARD: return <Dashboard user={user} lang={lang} />;
+      case View.MINISTRY_DASHBOARD: return <MinistryDashboard user={user} lang={lang} />;
       case View.BIRTH_CERT: return <BirthCertificate lang={lang} />;
       case View.DEATH_CERT: return <DeathCertificate lang={lang} />;
       case View.HEALTH_RECORDS: return <HealthRecords lang={lang} />;
-      case View.MINISTRY_DASHBOARD: return <MinistryDashboard user={user} lang={lang} />;
+      case View.PRINTING_CENTER: return <PrintingCenter user={user} lang={lang} />;
       case View.REPORTS: return <Reports user={user} lang={lang} />;
-      default: return <Dashboard user={user} lang={lang} />;
+      default: return <MinistryDashboard user={user} lang={lang} />;
     }
   };
 

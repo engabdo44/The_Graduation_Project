@@ -2,7 +2,7 @@
 export const translations = {
     ar: {
         direction: 'rtl',
-        portalName: 'بوابة الهوية والجوازات الصومالية',
+        portalName: 'بوابة الحكومة الإلكترونية',
         ministry: 'وزارة الداخلية والفيدرالية',
         location: 'مقديشو، الصومال',
         home: 'الرئيسية',
@@ -12,7 +12,7 @@ export const translations = {
         about: 'عن المنصة',
         contact: 'اتصل بنا',
         login: 'تسجيل الدخول',
-        heroTitle: 'بوابة الهوية والجواز الصومالي',
+        heroTitle: 'بوابة الحكومة الإلكترونية',
         heroSubtitle: 'نظام حكومي متكامل لإدارة الهوية الوطنية وإصدار وثائق السفر الإلكترونية بفاعلية وأمان تام للمواطن الصومالي.',
         heroDesc: 'منصة موحدة لتقديم طلبات إصدار وتجديد الهوية الوطنية وجواز السفر بكل يسر وسهولة، مع ضمان حماية البيانات البيومترية.',
         startService: 'ابدأ الخدمة',
@@ -215,7 +215,7 @@ export const translations = {
     },
     en: {
         direction: 'ltr',
-        portalName: 'Somalia Identity & Passport Portal',
+        portalName: 'E-Government Portal',
         ministry: 'Ministry of Interior & Federal Affairs',
         location: 'Mogadishu, Somalia',
         home: 'Home',
@@ -225,7 +225,7 @@ export const translations = {
         about: 'About',
         contact: 'Contact',
         login: 'Login',
-        heroTitle: 'Somalia ID & Passport Portal',
+        heroTitle: 'E-Government Portal',
         heroSubtitle: 'An integrated government system for managing national identity and issuing electronic travel documents efficiently.',
         heroDesc: 'A unified platform to apply for National Identity and Passport issuance and renewal with biometric data protection guaranteed.',
         startService: 'Start Service',
@@ -428,7 +428,7 @@ export const translations = {
     },
     so: {
         direction: 'ltr',
-        portalName: 'Boonada Aqoonsiga & Baasaboorka',
+        portalName: 'E-Government Portal',
         ministry: 'Wasaaradda Arrimaha Gudaha',
         location: 'Muqdisho, Soomaaliya',
         home: 'Bogga Hore',
@@ -438,7 +438,7 @@ export const translations = {
         about: 'Ku Saabsan',
         contact: 'Nala Xiriir',
         login: 'Soo Gal',
-        heroTitle: 'Adeegyada Aqoonsiga & Baasaboorka',
+        heroTitle: 'E-Government Portal',
         heroSubtitle: 'Nidaam dawladeed oo dhamaystiran oo loogu talagalay maamulidda aqoonsiga qaranka iyo bixinta baasaboorada.',
         heroDesc: 'Bog midaysan oo loogu talagalay codsashada iyo cusboonaysiinta Aqoonsiga Qaranka iyo Baasaboorka iyadoo la dammaanad qaadayo amniga xogta.',
         startService: 'Bilow Adeegga',

@@ -131,8 +131,51 @@ const ApplicationForm = () => {
             if (formData.reason === 'lost' || formData.reason === 'damaged') {
                  svcType = id?.includes('passport') ? 'PASSPORT_REPLACEMENT' : 'ID_REPLACEMENT';
             }
-            if (id === 'birth-cert-pdf') svcType = 'BIRTH_CERTIFICATE_PDF';
             if (id === 'birth-cert-reprint') svcType = 'BIRTH_CERTIFICATE_REPRINT';
+
+            if (svcType === 'BIRTH_CERTIFICATE_REPRINT') {
+                try {
+                    let res = await fetch(`http://localhost:5002/api/birth-certificates/${encodeURIComponent(accId)}`);
+                    let hData = null;
+                    if (res.ok) hData = await res.json();
+                    else {
+                        res = await fetch(`http://localhost:5002/api/birth-certificates/${encodeURIComponent(retrievedData?.fullName || storedUser.full_name)}`);
+                        if (res.ok) hData = await res.json();
+                    }
+
+                    if (!hData || hData.length === 0 || hData.error) {
+                        setValidationError('You do not have a registered Birth Certificate in the Health System to reprint.');
+                        return;
+                    }
+
+                    const selectedCert = hData[0];
+                    const response = await fetch('http://localhost:5002/api/certificates/birth/reprint', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            birth_id: selectedCert.birth_id,
+                            user_id: accId,
+                            username: storedUser.username || retrievedData?.fullName || 'citizen',
+                            account_type: typeValue
+                        })
+                    });
+
+                    const data = await response.json();
+                    if (!data.success) {
+                        setValidationError(data.error || 'Failed to submit reprint request');
+                        return;
+                    }
+
+                    setValidationError('');
+                    setIsSuccess(true);
+                    window.scrollTo(0, 0);
+                    return;
+                } catch (e) {
+                    console.error(e);
+                    setValidationError('Error connecting to Health System. Please try again.');
+                    return;
+                }
+            }
 
             try {
                 const response = await fetch('http://localhost:5000/api/user/requests', {

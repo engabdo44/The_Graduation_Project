@@ -378,6 +378,45 @@ const BirthCertificate = ({ lang }) => {
               </p>
             </motion.div>
 
+            {selectedResult?.citizen && (
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.5 }}
+                className="bg-white p-6 rounded-2xl border-l-[6px] border-green-500 shadow-xl ring-1 ring-slate-100 relative overflow-hidden"
+              >
+                <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
+                  <i className="fa-solid fa-id-card text-6xl text-green-500"></i>
+                </div>
+                <h4 className={`text-gov-navy font-black mb-4 flex items-center gap-2 uppercase tracking-[0.1em] text-[12px] ${lang === 'ar' ? 'flex-row-reverse' : ''}`}>
+                  <i className="fa-solid fa-link text-green-500"></i>
+                  {lang === 'ar' ? 'معلومات المواطن المرتبطة' : 'Linked Citizen Information'}
+                </h4>
+                
+                <div className={`grid grid-cols-2 md:grid-cols-4 gap-4 ${lang === 'ar' ? 'text-right' : ''}`}>
+                  <div>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{lang === 'ar' ? 'رقم الهوية الوطنية' : 'National ID'}</p>
+                    <p className="font-mono text-sm font-black text-gov-navy py-1">{selectedResult.citizen.national_number}</p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{lang === 'ar' ? 'الجنسية' : 'Nationality'}</p>
+                    <p className="text-sm font-black text-gov-navy py-1 uppercase">{selectedResult.citizen.nationality || 'SOMALI'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{lang === 'ar' ? 'حالة الحساب' : 'Account Status'}</p>
+                    <div className="mt-1 flex items-center gap-2">
+                       <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                       <span className="text-xs font-bold text-green-600 uppercase tracking-widest">{selectedResult.citizen.status || 'ACTIVE'}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{lang === 'ar' ? 'تاريخ التسجيل' : 'Registration Date'}</p>
+                    <p className="font-mono text-sm font-black text-gov-navy py-1">{new Date(selectedResult.citizen.created_at).toLocaleDateString('en-GB')}</p>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
             <div className={`grid grid-cols-2 gap-4 pb-10 ${lang === 'ar' ? 'flex-row-reverse' : ''}`}>
               <button className="bg-white text-gov-navy border border-gov-navy h-14 rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-slate-50 transition-all flex items-center justify-center gap-3 shadow-md">
                  <i className="fa-solid fa-print"></i> {common.print}
